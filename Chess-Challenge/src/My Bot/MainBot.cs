@@ -17,10 +17,11 @@ public class MainBot : IChessBot
         
         Stopwatch stopwatch = Stopwatch.StartNew();
         
-        Search(board, 4, int.MinValue, int.MaxValue, true);
+        Search(board, 8, int.MinValue, int.MaxValue, true);
         
         stopwatch.Stop();
-        Console.WriteLine($"Best move: {bestMoveRoot}, Time: {stopwatch.ElapsedMilliseconds}ms, Positions: {positionsEvaluated}");
+        Console.WriteLine($"Best move: {bestMoveRoot}, Time took: {stopwatch.ElapsedMilliseconds}ms, Positions evaluated: {positionsEvaluated}");
+        Console.WriteLine($"Transposition count: {transpositionTable.GetCount()}");
         
         return bestMoveRoot;
     }
@@ -56,9 +57,7 @@ public class MainBot : IChessBot
             {
                 if (moves[i].Equals(ttMove))
                 {
-                    Move temp = moves[0];
-                    moves[0] = moves[i];
-                    moves[i] = temp;
+                    (moves[0], moves[i]) = (moves[i], moves[0]);
                     break;
                 }
             }

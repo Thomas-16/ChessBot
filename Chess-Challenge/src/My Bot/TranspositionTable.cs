@@ -29,11 +29,13 @@ public class TranspositionTable
 {
     readonly TTEntry[] entries;
     readonly int size;
+    private int count;
     
     public TranspositionTable(int sizeMB = 16)
     {
         size = sizeMB * 1024 * 1024 / 32;
         entries = new TTEntry[size];
+        count = 0;
     }
     
     public bool TryGetEntry(ulong zobristKey, out TTEntry entry)
@@ -47,6 +49,7 @@ public class TranspositionTable
     {
         int index = (int)(zobristKey % (ulong)size);
         entries[index] = new TTEntry(zobristKey, value, depth, nodeType, bestMove);
+        count++;
     }
     
     public bool ProbeEntry(ulong zobristKey, int depth, int alpha, int beta, out int value, out Move bestMove)
@@ -81,5 +84,10 @@ public class TranspositionTable
         }
         
         return false;
+    }
+
+    public int GetCount()
+    {
+        return count;
     }
 }
