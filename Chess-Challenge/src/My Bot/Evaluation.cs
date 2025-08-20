@@ -6,6 +6,16 @@ public static class Evaluation
 
     public static int Evaluate(Board board)
     {
+        if (board.IsInCheckmate())
+        {
+            return board.IsWhiteToMove ? -30000 : 30000;
+        }
+        
+        if (board.IsDraw())
+        {
+            return 0;
+        }
+        
         int evaluation = 0;
         
         PieceList[] allPieceLists = board.GetAllPieceLists();
@@ -22,7 +32,7 @@ public static class Evaluation
                 evaluation -= materialValue;
         }
         
-        return evaluation;
+        return board.IsWhiteToMove ? evaluation : -evaluation;
     }
     
 }
