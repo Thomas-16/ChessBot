@@ -22,7 +22,7 @@ public static class MoveOrdering
         {
             int capturedValue = Evaluation.PieceValues[(int)move.CapturePieceType];
             int attackerValue = Evaluation.PieceValues[(int)move.MovePieceType];
-            score += capturedValue - attackerValue + 500;
+            score += capturedValue * 10 - attackerValue + 500; // Multiply victim value for better ordering
         }
         
         return score;
