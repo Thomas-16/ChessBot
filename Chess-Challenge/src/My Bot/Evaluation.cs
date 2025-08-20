@@ -1,8 +1,20 @@
 using ChessChallenge.API;
+using System;
 
 public static class Evaluation
 {
     public static readonly int[] PieceValues = { 0, 100, 320, 330, 500, 900, 0 };
+    
+    static readonly int[] DistanceFromCenterTable = {
+        3, 3, 3, 3, 3, 3, 3, 3,
+        3, 2, 2, 2, 2, 2, 2, 3,
+        3, 2, 1, 1, 1, 1, 2, 3,
+        3, 2, 1, 0, 0, 1, 2, 3,
+        3, 2, 1, 0, 0, 1, 2, 3,
+        3, 2, 1, 1, 1, 1, 2, 3,
+        3, 2, 2, 2, 2, 2, 2, 3,
+        3, 3, 3, 3, 3, 3, 3, 3
+    };
 
     public static int Evaluate(Board board)
     {
@@ -17,6 +29,7 @@ public static class Evaluation
         }
         
         int evaluation = 0;
+        int totalPieces = 0;
         
         PieceList[] allPieceLists = board.GetAllPieceLists();
         
@@ -25,11 +38,40 @@ public static class Evaluation
             PieceList pieceList = allPieceLists[i];
             int pieceValue = PieceValues[(int)pieceList.TypeOfPieceInList];
             int materialValue = pieceValue * pieceList.Count;
+            totalPieces += pieceList.Count;
             
             if (pieceList.IsWhitePieceList)
                 evaluation += materialValue;
             else
                 evaluation -= materialValue;
+        }
+        
+        float endGameWeight = 1f - Math.Min(1f, (totalPieces - 2) / 30f);
+        
+        if (endGameWeight > 0)
+        {
+            Square whiteKing = board.GetKingSquare(true);
+            Square blackKing = board.GetKingSquare(false);
+            
+            int whiteKingFile = whiteKing.File;
+            int whiteKingRank = whiteKing.Rank;
+            int blackKingFile = blackKing.File;
+            int blackKingRank = blackKing.Rank;
+            
+            int kingDistance = Math.Abs(whiteKingFile - blackKingFile) + Math.Abs(whiteKingRank - blackKingRank);
+            
+            if (evaluation > 500)
+            {
+                int blackKingToEdge = DistanceFromCenterTable[blackKing.Index];
+                int mopUpScore = blackKingToEdge * 10 + (14 - kingDistance) * 4;
+                evaluation += (int)(mopUpScore * endGameWeight);
+            }
+            else if (evaluation < -500)
+            {
+                int whiteKingToEdge = DistanceFromCenterTable[whiteKing.Index];
+                int mopUpScore = whiteKingToEdge * 10 + (14 - kingDistance) * 4;
+                evaluation -= (int)(mopUpScore * endGameWeight);
+            }
         }
         
         return board.IsWhiteToMove ? evaluation : -evaluation;
