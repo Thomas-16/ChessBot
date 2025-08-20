@@ -46,7 +46,9 @@ public static class Evaluation
                 evaluation -= materialValue;
         }
         
-        float endGameWeight = 1f - Math.Min(1f, (totalPieces - 2) / 12f);
+        // Count non-king pieces only
+        int nonKingPieces = totalPieces - 2;
+        float endGameWeight = 1f - Math.Min(1f, nonKingPieces / 14f);
         
         if (endGameWeight > 0.1f)
         {
