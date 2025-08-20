@@ -46,9 +46,9 @@ public static class Evaluation
                 evaluation -= materialValue;
         }
         
-        float endGameWeight = 1f - Math.Min(1f, (totalPieces - 2) / 30f);
+        float endGameWeight = 1f - Math.Min(1f, (totalPieces - 2) / 12f);
         
-        if (endGameWeight > 0)
+        if (endGameWeight > 0.1f)
         {
             Square whiteKing = board.GetKingSquare(true);
             Square blackKing = board.GetKingSquare(false);
@@ -60,16 +60,16 @@ public static class Evaluation
             
             int kingDistance = Math.Abs(whiteKingFile - blackKingFile) + Math.Abs(whiteKingRank - blackKingRank);
             
-            if (evaluation > 500)
+            if (evaluation > 200)
             {
                 int blackKingToEdge = DistanceFromCenterTable[blackKing.Index];
-                int mopUpScore = blackKingToEdge * 10 + (14 - kingDistance) * 4;
+                int mopUpScore = blackKingToEdge * 20 + (7 - kingDistance) * 10;
                 evaluation += (int)(mopUpScore * endGameWeight);
             }
-            else if (evaluation < -500)
+            else if (evaluation < -200)
             {
                 int whiteKingToEdge = DistanceFromCenterTable[whiteKing.Index];
-                int mopUpScore = whiteKingToEdge * 10 + (14 - kingDistance) * 4;
+                int mopUpScore = whiteKingToEdge * 20 + (7 - kingDistance) * 10;
                 evaluation -= (int)(mopUpScore * endGameWeight);
             }
         }
