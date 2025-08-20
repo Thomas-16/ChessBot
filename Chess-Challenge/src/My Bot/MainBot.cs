@@ -1,13 +1,22 @@
 ﻿using ChessChallenge.API;
 using System;
+using System.Diagnostics;
 
 public class MainBot : IChessBot
 {
     Move bestMoveRoot;
+    int positionsEvaluated;
     
     public Move Think(Board board, Timer timer)
     {
+        positionsEvaluated = 0;
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        
         Search(board, 4, int.MinValue, int.MaxValue, true);
+        
+        stopwatch.Stop();
+        Console.WriteLine($"Best move: {bestMoveRoot}, Time: {stopwatch.ElapsedMilliseconds}ms, Positions: {positionsEvaluated}");
+        
         return bestMoveRoot;
     }
     
@@ -15,6 +24,7 @@ public class MainBot : IChessBot
     {
         if (depth == 0 || board.IsInCheckmate() || board.IsDraw())
         {
+            positionsEvaluated++;
             return Evaluation.Evaluate(board);
         }
         
