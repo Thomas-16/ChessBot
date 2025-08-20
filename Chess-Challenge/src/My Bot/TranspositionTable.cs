@@ -48,8 +48,12 @@ public class TranspositionTable
     public void StoreEntry(ulong zobristKey, int value, int depth, NodeType nodeType, Move bestMove)
     {
         int index = (int)(zobristKey % (ulong)size);
+        
+        // Only increment count if this is a new entry (not a replacement)
+        if (entries[index].zobristKey == 0)
+            count++;
+        
         entries[index] = new TTEntry(zobristKey, value, depth, nodeType, bestMove);
-        count++;
     }
     
     public bool ProbeEntry(ulong zobristKey, int depth, int alpha, int beta, out int value, out Move bestMove)
