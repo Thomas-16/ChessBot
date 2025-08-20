@@ -17,7 +17,7 @@ public class MainBot : IChessBot
         
         Stopwatch stopwatch = Stopwatch.StartNew();
         
-        Search(board, 5, int.MinValue, int.MaxValue, true);
+        Search(board, 5, -9999999, 9999999, true);
         
         stopwatch.Stop();
         Console.WriteLine($"Best move: {bestMoveRoot}, Time took: {stopwatch.ElapsedMilliseconds}ms, Positions evaluated: {positionsEvaluated}");
@@ -33,14 +33,20 @@ public class MainBot : IChessBot
         
         if (transpositionTable.ProbeEntry(zobristKey, depth, alpha, beta, out int ttValue, out Move ttMove))
         {
-            if (!isRoot)
+            if (!isRoot && Math.Abs(ttValue) < 29000)
                 return ttValue;
         }
         
-        if (board.IsInCheckmate() || board.IsDraw())
+        if (board.IsInCheckmate())
         {
             positionsEvaluated++;
-            return Evaluation.Evaluate(board);
+            return board.IsWhiteToMove ? -30000 - depth : 30000 + depth;
+        }
+        
+        if (board.IsDraw())
+        {
+            positionsEvaluated++;
+            return 0;
         }
         
         if (depth == 0)
@@ -97,6 +103,17 @@ public class MainBot : IChessBot
     int QuiescenceSearch(Board board, int alpha, int beta)
     {
         positionsEvaluated++;
+        
+        if (board.IsInCheckmate())
+        {
+            return board.IsWhiteToMove ? -30000 : 30000;
+        }
+        
+        if (board.IsDraw())
+        {
+            return 0;
+        }
+        
         int evaluation = Evaluation.Evaluate(board);
         
         if (evaluation >= beta)
