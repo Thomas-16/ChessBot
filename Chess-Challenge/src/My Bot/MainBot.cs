@@ -40,7 +40,7 @@ public class MainBot : IChessBot
         if (board.IsInCheckmate())
         {
             positionsEvaluated++;
-            return board.IsWhiteToMove ? -30000 - depth : 30000 + depth;
+            return board.IsWhiteToMove ? -30000 + depth : 30000 - depth;
         }
         
         if (board.IsDraw())
