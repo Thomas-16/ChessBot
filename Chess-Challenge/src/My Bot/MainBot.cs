@@ -17,7 +17,7 @@ public class MainBot : IChessBot
         
         Stopwatch stopwatch = Stopwatch.StartNew();
         
-        Search(board, 8, int.MinValue, int.MaxValue, true);
+        Search(board, 5, int.MinValue, int.MaxValue, true);
         
         stopwatch.Stop();
         Console.WriteLine($"Best move: {bestMoveRoot}, Time took: {stopwatch.ElapsedMilliseconds}ms, Positions evaluated: {positionsEvaluated}");
