@@ -24,8 +24,7 @@ public class MainBot : IChessBot
     {
         if (depth == 0 || board.IsInCheckmate() || board.IsDraw())
         {
-            positionsEvaluated++;
-            return Evaluation.Evaluate(board);
+            return QuiescenceSearch(board, alpha, beta);
         }
         
         Move[] moves = board.GetLegalMoves();
@@ -54,5 +53,33 @@ public class MainBot : IChessBot
             bestMoveRoot = bestMove;
             
         return bestValue;
+    }
+    
+    int QuiescenceSearch(Board board, int alpha, int beta)
+    {
+        positionsEvaluated++;
+        int evaluation = Evaluation.Evaluate(board);
+        
+        if (evaluation >= beta)
+            return beta;
+        
+        alpha = Math.Max(alpha, evaluation);
+        
+        Move[] captures = board.GetLegalMoves(true);
+        MoveOrdering.OrderMoves(captures);
+        
+        foreach (Move capture in captures)
+        {
+            board.MakeMove(capture);
+            int value = -QuiescenceSearch(board, -beta, -alpha);
+            board.UndoMove(capture);
+            
+            if (value >= beta)
+                return beta;
+            
+            alpha = Math.Max(alpha, value);
+        }
+        
+        return alpha;
     }
 }
