@@ -194,13 +194,13 @@ namespace ChessChallenge.Application
                 boardUI.SetPerspective(PlayerWhite.IsHuman);
                 HumanWasWhiteLastGame = PlayerWhite.IsHuman;
             }
-            else if (PlayerWhite.Bot is MyBot && PlayerBlack.Bot is MyBot)
+            else if (PlayerWhite.Bot is MainBot && PlayerBlack.Bot is MainBot)
             {
                 boardUI.SetPerspective(true);
             }
             else
             {
-                boardUI.SetPerspective(PlayerWhite.Bot is MyBot);
+                boardUI.SetPerspective(PlayerWhite.Bot is MainBot);
             }
         }
 
@@ -208,15 +208,15 @@ namespace ChessChallenge.Application
         {
             return type switch
             {
-                PlayerType.MyBot => new ChessPlayer(new MyBot(), type, GameDurationMilliseconds),
-                PlayerType.EvilBot => new ChessPlayer(new EvilBot(), type, GameDurationMilliseconds),
+                PlayerType.MyBot => new ChessPlayer(new MainBot(), type, GameDurationMilliseconds),
+                PlayerType.EvilBot => new ChessPlayer(new TestBot(), type, GameDurationMilliseconds),
                 _ => new ChessPlayer(new HumanPlayer(boardUI), type)
             };
         }
 
         static (int totalTokenCount, int debugTokenCount) GetTokenCount()
         {
-            string path = Path.Combine(Directory.GetCurrentDirectory(), "src", "My Bot", "MyBot.cs");
+            string path = Path.Combine(Directory.GetCurrentDirectory(), "src", "My Bot", "MainBot.cs");
 
             using StreamReader reader = new(path);
             string txt = reader.ReadToEnd();
