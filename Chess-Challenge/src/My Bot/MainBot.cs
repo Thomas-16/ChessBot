@@ -6,10 +6,15 @@ public class MainBot : IChessBot
 {
     Move bestMoveRoot;
     int positionsEvaluated;
+    TranspositionTable? transpositionTable;
     
     public Move Think(Board board, Timer timer)
     {
         positionsEvaluated = 0;
+        
+        if (transpositionTable == null)
+            transpositionTable = new TranspositionTable(64);
+        
         Stopwatch stopwatch = Stopwatch.StartNew();
         
         Search(board, 4, int.MinValue, int.MaxValue, true);
@@ -22,6 +27,15 @@ public class MainBot : IChessBot
     
     int Search(Board board, int depth, int alpha, int beta, bool isRoot)
     {
+        ulong zobristKey = board.ZobristKey;
+        int originalAlpha = alpha;
+        
+        if (transpositionTable.ProbeEntry(zobristKey, depth, alpha, beta, out int ttValue, out Move ttMove))
+        {
+            if (!isRoot)
+                return ttValue;
+        }
+        
         if (board.IsInCheckmate() || board.IsDraw())
         {
             positionsEvaluated++;
@@ -35,6 +49,21 @@ public class MainBot : IChessBot
         
         Move[] moves = board.GetLegalMoves();
         MoveOrdering.OrderMoves(moves);
+        
+        if (!ttMove.IsNull)
+        {
+            for (int i = 0; i < moves.Length; i++)
+            {
+                if (moves[i].Equals(ttMove))
+                {
+                    Move temp = moves[0];
+                    moves[0] = moves[i];
+                    moves[i] = temp;
+                    break;
+                }
+            }
+        }
+        
         Move bestMove = moves[0];
         int bestValue = int.MinValue;
         
@@ -54,6 +83,11 @@ public class MainBot : IChessBot
             if (beta <= alpha)
                 break;
         }
+        
+        NodeType nodeType = bestValue <= originalAlpha ? NodeType.UpperBound :
+                           bestValue >= beta ? NodeType.LowerBound : NodeType.Exact;
+        
+        transpositionTable.StoreEntry(zobristKey, bestValue, depth, nodeType, bestMove);
         
         if (isRoot)
             bestMoveRoot = bestMove;
