@@ -22,7 +22,13 @@ public class MainBot : IChessBot
     
     int Search(Board board, int depth, int alpha, int beta, bool isRoot)
     {
-        if (depth == 0 || board.IsInCheckmate() || board.IsDraw())
+        if (board.IsInCheckmate() || board.IsDraw())
+        {
+            positionsEvaluated++;
+            return Evaluation.Evaluate(board);
+        }
+        
+        if (depth == 0)
         {
             return QuiescenceSearch(board, alpha, beta);
         }
