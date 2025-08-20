@@ -26,9 +26,6 @@
     <Compile Update="src\My Bot\MainBot.cs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Compile>
-    <Compile Update="src\Framework\Application\UI\BotBrainCapacityUI.cs">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-    </Compile>
     <Compile Update="src\Evil Bot\TestBot.cs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Compile>
