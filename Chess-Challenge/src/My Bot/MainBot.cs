@@ -6,11 +6,14 @@ public class MainBot : IChessBot
 {
     Move bestMoveThisIteration;
     Move bestMove; // Best move so far
-    int positionsEvaluated;
+    
     TranspositionTable? transpositionTable;
+    
     Stopwatch searchStopwatch;
     int timeLimit = 200; // ms
     bool timeUp;
+    
+    int positionsEvaluated;
     
     public Move Think(Board board, Timer timer)
     {
