@@ -11,7 +11,7 @@ public class MainBot : IChessBot
     
     Stopwatch searchStopwatch;
     int timeLimit = 200; // ms
-    bool timeUp;
+    bool searchCanceled;
     
     int positionsEvaluated;
     
@@ -20,7 +20,7 @@ public class MainBot : IChessBot
         positionsEvaluated = 0;
         bestMoveThisIteration = Move.NullMove;
         bestMove = Move.NullMove;
-        timeUp = false;
+        searchCanceled = false;
         
         if (transpositionTable == null)
             transpositionTable = new TranspositionTable(64);
@@ -36,13 +36,13 @@ public class MainBot : IChessBot
             int score = Search(board, depth, -9999999, 9999999, true);
             depthSearched++;
             
-            // If search completed without timeout, save this as our best move
-            if (!timeUp)
+            // Search fully completed
+            if (!searchCanceled)
             {
                 bestMove = bestMoveThisIteration;
                 lastScore = score;
                 
-                // Also stop if we found a checkmate
+                // Stop if we found a checkmate
                 if (Math.Abs(score) > 29000)
                 {
                     break;
@@ -79,11 +79,11 @@ public class MainBot : IChessBot
         // Check time limit periodically (not every node to avoid overhead)
         if (positionsEvaluated % 1000 == 0 && searchStopwatch.ElapsedMilliseconds > timeLimit)
         {
-            timeUp = true;
+            searchCanceled = true;
             return 0; // Return immediately if time is up
         }
         
-        if (timeUp)
+        if (searchCanceled)
             return 0;
         
         ulong zobristKey = board.ZobristKey;
@@ -146,14 +146,14 @@ public class MainBot : IChessBot
         
         foreach (Move move in moves)
         {
-            if (timeUp)
+            if (searchCanceled)
                 break;
                 
             board.MakeMove(move);
             int value = -Search(board, depth - 1, -beta, -alpha, false);
             board.UndoMove(move);
             
-            if (timeUp)
+            if (searchCanceled)
                 break;
             
             if (value > bestValue)
@@ -168,7 +168,7 @@ public class MainBot : IChessBot
         }
         
         // Only store in TT if search wasn't interrupted
-        if (!timeUp)
+        if (!searchCanceled)
         {
             NodeType nodeType = bestValue <= originalAlpha ? NodeType.UpperBound :
                                bestValue >= beta ? NodeType.LowerBound : NodeType.Exact;
@@ -187,11 +187,11 @@ public class MainBot : IChessBot
         // Quick time check in quiescence search too
         if (positionsEvaluated % 1000 == 0 && searchStopwatch.ElapsedMilliseconds > timeLimit)
         {
-            timeUp = true;
+            searchCanceled = true;
             return 0;
         }
         
-        if (timeUp)
+        if (searchCanceled)
             return 0;
         
         positionsEvaluated++;
@@ -219,14 +219,14 @@ public class MainBot : IChessBot
         
         foreach (Move capture in captures)
         {
-            if (timeUp)
+            if (searchCanceled)
                 break;
                 
             board.MakeMove(capture);
             int value = -QuiescenceSearch(board, -beta, -alpha);
             board.UndoMove(capture);
             
-            if (timeUp)
+            if (searchCanceled)
                 break;
             
             if (value >= beta)
