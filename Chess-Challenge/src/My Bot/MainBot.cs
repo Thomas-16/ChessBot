@@ -208,9 +208,6 @@ public class MainBot : IChessBot
         
         foreach (Move capture in captures)
         {
-            if (searchCanceled)
-                break;
-                
             board.MakeMove(capture);
             int value = -QuiescenceSearch(board, -beta, -alpha);
             board.UndoMove(capture);
