@@ -27,23 +27,23 @@ public class MainBot : IChessBot
         
         searchStopwatch = Stopwatch.StartNew();
         
-        int lastScore = 0;
+        int bestEval = 0;
         int depthSearched = 0;
         
         // Iterative deepening loop
         for (int depth = 1; depth <= 256; depth++)
         {
-            int score = Search(board, depth, -9999999, 9999999, true);
+            int eval = Search(board, depth, -9999999, 9999999, true);
             depthSearched++;
             
             // Search fully completed
             if (!searchCanceled)
             {
                 bestMove = bestMoveThisIteration;
-                lastScore = score;
+                bestEval = eval;
                 
                 // Stop if we found a checkmate
-                if (Math.Abs(score) > 29000)
+                if (Math.Abs(eval) > 29000)
                 {
                     break;
                 }
@@ -55,7 +55,7 @@ public class MainBot : IChessBot
                 {
                     // Use the best move we've found so far in this iteration
                     bestMove = bestMoveThisIteration;
-                    lastScore = score;
+                    bestEval = eval;
                 }
                 break;
             }
@@ -63,7 +63,7 @@ public class MainBot : IChessBot
         
         searchStopwatch.Stop();
         Console.WriteLine($"Depth searched: {depthSearched}, Final move: {bestMove.ToString()}, Time took: {searchStopwatch.ElapsedMilliseconds}ms, " +
-                        $"Positions evaluated: {positionsEvaluated}, Score: {lastScore}");
+                        $"Positions evaluated: {positionsEvaluated}, Score: {bestEval}");
 
         if (bestMove == Move.NullMove)
         {
@@ -141,7 +141,7 @@ public class MainBot : IChessBot
             }
         }
         
-        Move bestMove = moves.Length > 0 ? moves[0] : Move.NullMove;
+        Move bestMoveThisPosition = moves.Length > 0 ? moves[0] : Move.NullMove;
         int bestValue = int.MinValue;
         
         foreach (Move move in moves)
@@ -159,7 +159,7 @@ public class MainBot : IChessBot
             if (value > bestValue)
             {
                 bestValue = value;
-                bestMove = move;
+                bestMoveThisPosition = move;
             }
             
             alpha = Math.Max(alpha, value);
@@ -173,10 +173,10 @@ public class MainBot : IChessBot
             NodeType nodeType = bestValue <= originalAlpha ? NodeType.UpperBound :
                                bestValue >= beta ? NodeType.LowerBound : NodeType.Exact;
             
-            transpositionTable.StoreEntry(zobristKey, bestValue, depth, nodeType, bestMove);
+            transpositionTable.StoreEntry(zobristKey, bestValue, depth, nodeType, bestMoveThisPosition);
             
             if (isRoot)
-                bestMoveThisIteration = bestMove;
+                bestMoveThisIteration = bestMoveThisPosition;
         }
             
         return bestValue;
@@ -184,18 +184,6 @@ public class MainBot : IChessBot
     
     int QuiescenceSearch(Board board, int alpha, int beta)
     {
-        // Quick time check in quiescence search too
-        if (positionsEvaluated % 1000 == 0 && searchStopwatch.ElapsedMilliseconds > timeLimit)
-        {
-            searchCanceled = true;
-            return 0;
-        }
-        
-        if (searchCanceled)
-            return 0;
-        
-        positionsEvaluated++;
-        
         if (board.IsInCheckmate())
         {
             // Current player is checkmated - return negative
@@ -207,6 +195,7 @@ public class MainBot : IChessBot
             return 0;
         }
         
+        positionsEvaluated++;
         int evaluation = Evaluation.Evaluate(board);
         
         if (evaluation >= beta)
@@ -225,9 +214,6 @@ public class MainBot : IChessBot
             board.MakeMove(capture);
             int value = -QuiescenceSearch(board, -beta, -alpha);
             board.UndoMove(capture);
-            
-            if (searchCanceled)
-                break;
             
             if (value >= beta)
                 return beta;
