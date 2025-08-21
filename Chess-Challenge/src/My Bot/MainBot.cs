@@ -8,6 +8,7 @@ public class MainBot : IChessBot
     Move bestMove; // Best move so far
     
     TranspositionTable? transpositionTable;
+    MoveOrdering? moveOrdering;
     
     Stopwatch searchStopwatch;
     int timeLimit = 200; // ms
@@ -24,6 +25,9 @@ public class MainBot : IChessBot
         
         if (transpositionTable == null)
             transpositionTable = new TranspositionTable(64);
+            
+        if (moveOrdering == null)
+            moveOrdering = new MoveOrdering();
         
         searchStopwatch = Stopwatch.StartNew();
         
@@ -114,32 +118,7 @@ public class MainBot : IChessBot
         }
         
         Move[] moves = board.GetLegalMoves();
-        MoveOrdering.OrderMoves(moves);
-        
-        // Prioritize the best move from previous iteration (from TT)
-        if (!ttMove.IsNull)
-        {
-            for (int i = 0; i < moves.Length; i++)
-            {
-                if (moves[i].Equals(ttMove))
-                {
-                    (moves[0], moves[i]) = (moves[i], moves[0]);
-                    break;
-                }
-            }
-        }
-        // At root, also prioritize the best move from previous iteration
-        else if (isRoot && !this.bestMove.IsNull)
-        {
-            for (int i = 0; i < moves.Length; i++)
-            {
-                if (moves[i].Equals(this.bestMove))
-                {
-                    (moves[0], moves[i]) = (moves[i], moves[0]);
-                    break;
-                }
-            }
-        }
+        moveOrdering.OrderMoves(moves, ttMove);
         
         Move bestMoveThisPosition = moves.Length > 0 ? moves[0] : Move.NullMove;
         int bestValue = int.MinValue;
@@ -204,7 +183,7 @@ public class MainBot : IChessBot
         alpha = Math.Max(alpha, evaluation);
         
         Move[] captures = board.GetLegalMoves(true);
-        MoveOrdering.OrderMoves(captures);
+        moveOrdering.OrderMoves(captures);
         
         foreach (Move capture in captures)
         {

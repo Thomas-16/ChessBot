@@ -1,16 +1,21 @@
 using ChessChallenge.API;
 using System;
 
-public static class MoveOrdering
+public class MoveOrdering
 {
-    public static void OrderMoves(Move[] moves)
+    public void OrderMoves(Move[] moves, Move hashMove = default)
     {
-        Array.Sort(moves, (move1, move2) => GetMoveScore(move2).CompareTo(GetMoveScore(move1)));
+        Array.Sort(moves, (move1, move2) => GetMoveScore(move2, hashMove).CompareTo(GetMoveScore(move1, hashMove)));
     }
     
-    static int GetMoveScore(Move move)
+    int GetMoveScore(Move move, Move hashMove)
     {
         int score = 0;
+        
+        if (!hashMove.IsNull && move.Equals(hashMove))
+        {
+            return 100000; // Highest priority for TT hash move
+        }
         
         if (move.IsPromotion)
         {
