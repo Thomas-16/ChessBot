@@ -59,8 +59,8 @@ public class MainBot : IChessBot
         }
         
         searchStopwatch.Stop();
-        Console.WriteLine($"Final move: {bestMove}, Time took: {searchStopwatch.ElapsedMilliseconds}ms, " +
-                        $"Positions evaluated: {positionsEvaluated}, Score: {lastScore}, Depth searched: {depthSearched}");
+        Console.WriteLine($"Depth searched: {depthSearched}, Final move: {bestMove.ToString()}, Time took: {searchStopwatch.ElapsedMilliseconds}ms, " +
+                        $"Positions evaluated: {positionsEvaluated}, Score: {lastScore}");
 
         if (bestMove == Move.NullMove)
         {
