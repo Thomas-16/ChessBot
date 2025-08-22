@@ -57,3 +57,4 @@ nunit-*.xml
 .idea/
 
 .DS_Store
+Chess-Challenge/src/.DS_Store
