@@ -23,46 +23,8 @@ public class MainBot : IChessBot
     
     public Move Think(Board board, Timer timer)
     {
-        // Predetermined first 2 moves
-        if (board.PlyCount == 0) {
-            Move dMove = new Move("d2d4", board);
-            Move eMove = new Move("e2e4", board);
-
-            Random rand = new Random();
-            Move selectedMove;
-
-            if (rand.Next(2) == 0)  // Randomly generates 0 or 1
-            {
-                selectedMove = dMove;
-            }
-            else {
-                selectedMove = eMove;
-            }
-
-            return selectedMove;
-        }
-        if (board.PlyCount == 1) {
-            Move lastMove = board.GameMoveHistory[^1]; // Gets the last move
-            Move nextMove;
-            Random rand = new Random();
-
-            if (lastMove.ToString() == "d2d4") {
-                return new Move("d7d5", board);
-            }
-            if (lastMove.ToString() == "e2e4") {
-                if (rand.Next(4) == 0)  // Randomly generates 0 or 1
-                {
-                    nextMove = new Move("e7e5", board);
-                }
-                else {
-                    nextMove = new Move("c7c5", board);
-                }
-                return nextMove;
-            }
-        }
-        
         // Book moves
-        if (board.PlyCount <= 18 && openingBook.TryGetBookMove(board, out string moveString, 0.85)) {
+        if (board.PlyCount <= 18 && openingBook.TryGetBookMove(board, out string moveString, 0.9)) {
             Console.WriteLine($"Book move found: {moveString}");
             return new Move(moveString, board);
         }

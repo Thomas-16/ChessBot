@@ -75,8 +75,17 @@ public class OpeningBook
     }
 
     string RemoveMoveCountersFromFEN(string fen) {
-        string fenA = fen[..fen.LastIndexOf(' ')];
-        return fenA[..fenA.LastIndexOf(' ')];
+        // Split the FEN into parts
+        string[] parts = fen.Split(' ');
+    
+        if (parts.Length < 4) return fen; // Not a valid FEN
+    
+        // Reconstruct without move counters and normalize en passant
+        // Format: [board] [side] [castling] [en passant]
+        // We keep the first 4 parts but normalize en passant to "-"
+        string normalizedFen = $"{parts[0]} {parts[1]} {parts[2]} -";
+    
+        return normalizedFen;
     }
 
 }
