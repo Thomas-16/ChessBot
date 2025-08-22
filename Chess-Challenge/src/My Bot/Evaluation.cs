@@ -98,7 +98,7 @@ public static class Evaluation
 
         // Center control
         int pawnCenterControlScore = 8;
-        int pieceCenterControlScore = 12;
+        int pieceCenterControlScore = 10;
         int whiteCenterControl = BitboardHelper.GetNumberOfSetBits((whitePieces & ~whitePawns) & centerSquares) * pieceCenterControlScore
                                  + BitboardHelper.GetNumberOfSetBits(whitePawns & centerSquares) * pawnCenterControlScore;
         int blackCenterControl = BitboardHelper.GetNumberOfSetBits((blackPieces & ~blackPawns) & centerSquares) * pieceCenterControlScore
