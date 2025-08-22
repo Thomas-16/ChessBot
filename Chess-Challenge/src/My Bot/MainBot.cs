@@ -41,7 +41,6 @@ public class MainBot : IChessBot
 
             return selectedMove;
         }
-
         if (board.PlyCount == 1) {
             Move lastMove = board.GameMoveHistory[^1]; // Gets the last move
             Move nextMove;
@@ -93,7 +92,7 @@ public class MainBot : IChessBot
                 thinkTimeMs += myIncrementMs * 0.8;
             }
 
-            double minThinkTime =Math. Min(50, myTimeRemainingMs * 0.25);
+            double minThinkTime = Math.Min(50, myTimeRemainingMs * 0.25);
             timeLimit = (int) Math.Ceiling(Math.Max(minThinkTime, thinkTimeMs));
         }
         
