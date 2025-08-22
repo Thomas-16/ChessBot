@@ -15,6 +15,22 @@ public static class Evaluation
         3, 2, 2, 2, 2, 2, 2, 3,
         3, 3, 3, 3, 3, 3, 3, 3
     };
+    static readonly ulong centerSquares = ((ulong)1 << new Square("e4").Index)
+                          | ((ulong)1 << new Square("d4").Index)
+                          | ((ulong)1 << new Square("e5").Index)
+                          | ((ulong)1 << new Square("d5").Index)
+                          | ((ulong)1 << new Square("c3").Index)
+                          | ((ulong)1 << new Square("f3").Index)
+                          | ((ulong)1 << new Square("c6").Index)
+                          | ((ulong)1 << new Square("f6").Index)
+                          | ((ulong)1 << new Square("c4").Index)
+                          | ((ulong)1 << new Square("f4").Index)
+                          | ((ulong)1 << new Square("c5").Index)
+                          | ((ulong)1 << new Square("f5").Index)
+                          | ((ulong)1 << new Square("d3").Index)
+                          | ((ulong)1 << new Square("e3").Index)
+                          | ((ulong)1 << new Square("d6").Index)
+                          | ((ulong)1 << new Square("e6").Index);
 
     public static int Evaluate(Board board)
     {
@@ -73,6 +89,19 @@ public static class Evaluation
             {
                 evaluation -= materialValue + pstValue;
             }
+        }
+        
+        ulong whitePieces = board.WhitePiecesBitboard;
+        ulong blackPieces = board.BlackPiecesBitboard;
+        
+        int whiteCenterControlScore = BitboardHelper.GetNumberOfSetBits(whitePieces & centerSquares);
+        int blackCenterControlScore = BitboardHelper.GetNumberOfSetBits(blackPieces & centerSquares);
+        
+        // In the opening and midgame, add score for center control
+        if (totalPieces < 25) {
+            float openingScalingFactor = Math.Clamp(totalPieces / 20f, 0f, 1f);
+
+            evaluation += (int) Math.Round((whiteCenterControlScore - blackCenterControlScore) * 20f * openingScalingFactor);
         }
         
         // Mop-up evaluation for endgame
