@@ -213,7 +213,7 @@ namespace ChessChallenge.API
         /// </summary>
         public bool IsDraw()
 		{
-			return IsFiftyMoveDraw() || IsInsufficientMaterial() || IsInStalemate() || IsRepeatedPosition();
+			return IsFiftyMoveDraw() || IsInsufficientMaterial() || IsRepeatedPosition() || IsInStalemate();
 		}
 
         /// <summary>
