@@ -91,18 +91,21 @@ public static class Evaluation
             }
         }
         
+        ulong whitePawns = board.GetPieceBitboard(PieceType.Pawn, true);
+        ulong blackPawns = board.GetPieceBitboard(PieceType.Pawn, false);
         ulong whitePieces = board.WhitePiecesBitboard;
         ulong blackPieces = board.BlackPiecesBitboard;
-        
-        int whiteCenterControlScore = BitboardHelper.GetNumberOfSetBits(whitePieces & centerSquares);
-        int blackCenterControlScore = BitboardHelper.GetNumberOfSetBits(blackPieces & centerSquares);
-        
-        // In the opening and midgame, add score for center control
-        if (totalPieces < 25) {
-            float openingScalingFactor = Math.Clamp(totalPieces / 20f, 0f, 1f);
 
-            evaluation += (int) Math.Round((whiteCenterControlScore - blackCenterControlScore) * 20f * openingScalingFactor);
-        }
+        // Center control
+        int pawnCenterControlScore = 8;
+        int pieceCenterControlScore = 12;
+        int whiteCenterControl = BitboardHelper.GetNumberOfSetBits((whitePieces & ~whitePawns) & centerSquares) * pieceCenterControlScore
+                                 + BitboardHelper.GetNumberOfSetBits(whitePawns & centerSquares) * pawnCenterControlScore;
+        int blackCenterControl = BitboardHelper.GetNumberOfSetBits((blackPieces & ~blackPawns) & centerSquares) * pieceCenterControlScore
+                                 + BitboardHelper.GetNumberOfSetBits(blackPawns & centerSquares) * pawnCenterControlScore;
+
+        // Apply with opening weight (important early, less important in endgame)
+        evaluation += (int)((whiteCenterControl - blackCenterControl) * openingWeight);
         
         // Mop-up evaluation for endgame
         evaluation += EvaluateMopUp(board, evaluation, endGameWeight);
