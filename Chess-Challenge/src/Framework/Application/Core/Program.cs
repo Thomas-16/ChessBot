@@ -13,9 +13,9 @@ namespace ChessChallenge.Application
         public static void Main(string[] args)
         {
             // Check for UCI mode
-            bool uciMode = args.Length > 0 && (args[0].ToLower() == "--uci" || args[0].ToLower() == "uci");
+            bool UCI_MODE = false;
             
-            if (uciMode)
+            if (UCI_MODE)
             {
                 RunUCIMode();
                 return;
