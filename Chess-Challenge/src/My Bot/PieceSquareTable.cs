@@ -2,7 +2,7 @@ using ChessChallenge.API;
 
 public static class PieceSquareTable
 {
-    private static readonly int[] Pawns = {
+    public static readonly int[] Pawns = {
 		 0,   0,   0,   0,   0,   0,   0,   0,
 		50,  50,  50,  50,  50,  50,  50,  50,
 		10,  10,  20,  30,  30,  20,  10,  10,
@@ -13,7 +13,7 @@ public static class PieceSquareTable
 		 0,   0,   0,   0,   0,   0,   0,   0
 	};
 
-	private static readonly int[] PawnsEnd = {
+	public static readonly int[] PawnsEnd = {
 		 0,   0,   0,   0,   0,   0,   0,   0,
 		80,  80,  80,  80,  80,  80,  80,  80,
 		50,  50,  50,  50,  50,  50,  50,  50,
@@ -24,7 +24,7 @@ public static class PieceSquareTable
 		 0,   0,   0,   0,   0,   0,   0,   0
 	};
 
-	private static readonly int[] Rooks =  {
+	public static readonly int[] Rooks =  {
 		0,  0,  0,  0,  0,  0,  0,  0,
 		5, 10, 10, 10, 10, 10, 10,  5,
 		-5,  0,  0,  0,  0,  0,  0, -5,
@@ -34,7 +34,7 @@ public static class PieceSquareTable
 		-5,  0,  0,  0,  0,  0,  0, -5,
 		0,  0,  0,  5,  5,  0,  0,  0
 	};
-	private static readonly int[] Knights = {
+	public static readonly int[] Knights = {
 		-50,-40,-30,-30,-30,-30,-40,-50,
 		-40,-20,  0,  0,  0,  0,-20,-40,
 		-30,  0, 10, 15, 15, 10,  0,-30,
@@ -44,7 +44,7 @@ public static class PieceSquareTable
 		-40,-20,  0,  5,  5,  0,-20,-40,
 		-50,-40,-30,-30,-30,-30,-40,-50,
 	};
-	private static readonly int[] Bishops =  {
+	public static readonly int[] Bishops =  {
 		-20,-10,-10,-10,-10,-10,-10,-20,
 		-10,  0,  0,  0,  0,  0,  0,-10,
 		-10,  0,  5, 10, 10,  5,  0,-10,
@@ -54,7 +54,7 @@ public static class PieceSquareTable
 		-10,  5,  0,  0,  0,  0,  5,-10,
 		-20,-10,-10,-10,-10,-10,-10,-20,
 	};
-	private static readonly int[] Queens =  {
+	public static readonly int[] Queens =  {
 		-20,-10,-10, -5, -5,-10,-10,-20,
 		-10,  0,  0,  0,  0,  0,  0,-10,
 		-10,  0,  5,  5,  5,  5,  0,-10,
@@ -64,7 +64,7 @@ public static class PieceSquareTable
 		-10,  0,  5,  0,  0,  0,  0,-10,
 		-20,-10,-10, -5, -5,-10,-10,-20
 	};
-	private static readonly int[] KingStart = 
+	public static readonly int[] KingStart = 
 	{
 		-80, -70, -70, -70, -70, -70, -70, -80, 
 		-60, -60, -60, -60, -60, -60, -60, -60, 
@@ -76,7 +76,7 @@ public static class PieceSquareTable
 		20,  30,  10,   0,   0,  10,  30,  20
 	};
 
-	private static readonly int[] KingEnd = 
+	public static readonly int[] KingEnd = 
 	{
 		-20, -10, -10, -10, -10, -10, -10, -20,
 		-5,   0,   5,   5,   5,   5,   0,  -5,
