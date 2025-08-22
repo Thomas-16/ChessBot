@@ -10,7 +10,27 @@ namespace ChessChallenge.Application
         const bool hideRaylibLogs = true;
         static Camera2D cam;
 
-        public static void Main()
+        public static void Main(string[] args)
+        {
+            // Check for UCI mode
+            bool uciMode = args.Length > 0 && (args[0].ToLower() == "--uci" || args[0].ToLower() == "uci");
+            
+            if (uciMode)
+            {
+                RunUCIMode();
+                return;
+            }
+            
+            RunGUIMode();
+        }
+        
+        static void RunUCIMode()
+        {
+            var uciEngine = new UCIEngine();
+            uciEngine.Run();
+        }
+        
+        static void RunGUIMode()
         {
             Vector2 loadedWindowSize = GetSavedWindowSize();
             int screenWidth = (int)loadedWindowSize.X;

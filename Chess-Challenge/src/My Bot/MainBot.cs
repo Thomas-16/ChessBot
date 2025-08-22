@@ -78,6 +78,10 @@ public class MainBot : IChessBot
         if (moveOrdering == null)
             moveOrdering = new MoveOrdering();
         
+        // Set time limit based on timer
+        timeLimit = Math.Min(timer.MillisecondsRemaining / 30, 5000); // Use 1/30th of remaining time, max 5s
+        timeLimit = Math.Max(timeLimit, 100); // Minimum 100ms
+        
         searchStopwatch = Stopwatch.StartNew();
         
         int bestEval = 0;
