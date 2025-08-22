@@ -16,6 +16,7 @@ public class MainBot : IChessBot
     
     Stopwatch searchStopwatch;
     int timeLimit = 200; // ms
+    bool useTimer = false;
     bool searchCanceled;
     
     int positionsEvaluated;
@@ -79,8 +80,22 @@ public class MainBot : IChessBot
             moveOrdering = new MoveOrdering();
         
         // Set time limit based on timer
-        timeLimit = Math.Min(timer.MillisecondsRemaining / 30, 5000); // Use 1/30th of remaining time, max 5s
-        timeLimit = Math.Max(timeLimit, 100); // Minimum 100ms
+        if (useTimer) {
+            int myTimeRemainingMs = timer.MillisecondsRemaining;
+            int myIncrementMs = timer.IncrementMilliseconds;
+            
+            // Get a fraction of remaining time to use for current move
+            double thinkTimeMs = myTimeRemainingMs / 40.0;
+            // Clamp think timee
+            thinkTimeMs = Math.Min(5000, thinkTimeMs);
+            // Add increment
+            if (myTimeRemainingMs > myIncrementMs * 2) {
+                thinkTimeMs += myIncrementMs * 0.8;
+            }
+
+            double minThinkTime =Math. Min(50, myTimeRemainingMs * 0.25);
+            timeLimit = (int) Math.Ceiling(Math.Max(minThinkTime, thinkTimeMs));
+        }
         
         searchStopwatch = Stopwatch.StartNew();
         
