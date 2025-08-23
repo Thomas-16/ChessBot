@@ -24,7 +24,7 @@ public class MainBot : IChessBot
     public Move Think(Board board, Timer timer)
     {
         // Book moves
-        if (board.PlyCount <= 18 && openingBook.TryGetBookMove(board, out string moveString, 0.9)) {
+        if (board.PlyCount <= 18 && openingBook.TryGetBookMove(board, out string moveString, 0.8)) {
             Console.WriteLine($"Book move found: {moveString}");
             return new Move(moveString, board);
         }
