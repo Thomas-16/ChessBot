@@ -17,7 +17,7 @@ public class MainBot : IChessBot
     Stopwatch searchStopwatch;
     
     // Set timeLimit to 0 to use match Timer in GUI mode
-    int timeLimit = 0; // ms
+    int timeLimit = 200; // ms
     bool useTimer;
     bool useMoveTime;
     bool guiModeIsTimerConfiged = false;
