@@ -3,9 +3,9 @@ using System;
 
 public class MoveOrdering
 {
-    public void OrderMoves(Move[] moves, Move hashMove = default)
+    public void OrderMoves(Span<Move> moves, Move hashMove = default)
     {
-        Array.Sort(moves, (move1, move2) => GetMoveScore(move2, hashMove).CompareTo(GetMoveScore(move1, hashMove)));
+        moves.Sort((move1, move2) => GetMoveScore(move2, hashMove).CompareTo(GetMoveScore(move1, hashMove)));
     }
     
     int GetMoveScore(Move move, Move hashMove)

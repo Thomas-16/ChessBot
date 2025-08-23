@@ -184,13 +184,14 @@ public class MainBot : IChessBot
             return QuiescenceSearch(board, alpha, beta);
         }
         
-        Move[] moves = board.GetLegalMoves();
-        moveOrdering.OrderMoves(moves, ttMove);
+        Span<Move> movesSpan = stackalloc Move[256];
+        board.GetLegalMovesNonAlloc(ref movesSpan);
+        moveOrdering.OrderMoves(movesSpan, ttMove);
         
-        Move bestMoveThisPosition = moves.Length > 0 ? moves[0] : Move.NullMove;
+        Move bestMoveThisPosition = movesSpan.Length > 0 ? movesSpan[0] : Move.NullMove;
         int bestValue = int.MinValue;
         
-        foreach (Move move in moves)
+        foreach (Move move in movesSpan)
         {
             if (searchCanceled)
                 break;
@@ -260,10 +261,11 @@ public class MainBot : IChessBot
         
         alpha = Math.Max(alpha, evaluation);
         
-        Move[] captures = board.GetLegalMoves(true);
-        moveOrdering.OrderMoves(captures);
+        Span<Move> capturesSpan = stackalloc Move[256];
+        board.GetLegalMovesNonAlloc(ref capturesSpan, true);
+        moveOrdering.OrderMoves(capturesSpan);
         
-        foreach (Move capture in captures)
+        foreach (Move capture in capturesSpan)
         {
             // Check cancellation before making a move
             if (searchCanceled)
