@@ -12,6 +12,7 @@ public class UCIEngine
     private Thread searchThread;
     private bool isSearching;
     private volatile bool shouldStop;
+    private CancellationTokenSource cancellationTokenSource;
     private Move bestMove;
     
     public UCIEngine()
@@ -206,6 +207,9 @@ public class UCIEngine
         shouldStop = false;
         bestMove = Move.NullMove;
         
+        // Create cancellation token for this search
+        cancellationTokenSource = new CancellationTokenSource();
+        
         searchThread = new Thread(() =>
         {
             try
@@ -215,7 +219,7 @@ public class UCIEngine
                 
                 bestMove = bot.Think(board, timer);
                 
-                if (!shouldStop)
+                if (!shouldStop && !cancellationTokenSource.Token.IsCancellationRequested)
                 {
                     Console.WriteLine($"bestmove {bestMove}");
                 }
@@ -227,7 +231,10 @@ public class UCIEngine
                 if (legalMoves.Length > 0)
                 {
                     bestMove = legalMoves[0];
-                    Console.WriteLine($"bestmove {bestMove}");
+                    if (!shouldStop && !cancellationTokenSource.Token.IsCancellationRequested)
+                    {
+                        Console.WriteLine($"bestmove {bestMove}");
+                    }
                 }
                 else
                 {
@@ -237,6 +244,7 @@ public class UCIEngine
             finally
             {
                 isSearching = false;
+                cancellationTokenSource?.Dispose();
             }
         });
         
@@ -249,14 +257,15 @@ public class UCIEngine
         {
             shouldStop = true;
             
+            // Cancel the search using the cancellation token
+            if (cancellationTokenSource != null)
+            {
+                cancellationTokenSource.Cancel();
+            }
+            
             if (searchThread != null && searchThread.IsAlive)
             {
-                searchThread.Join(1000); // Wait up to 1 second
-                
-                if (searchThread.IsAlive)
-                {
-                    searchThread.Abort();
-                }
+                searchThread.Join(1000); // Wait up to 1 second for graceful shutdown
             }
             
             if (bestMove != Move.NullMove)
