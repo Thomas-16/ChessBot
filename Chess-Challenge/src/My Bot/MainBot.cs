@@ -227,6 +227,17 @@ public class MainBot : IChessBot
     
     int QuiescenceSearch(Board board, int alpha, int beta)
     {
+        // Check if search was canceled (time ran out)
+        if (searchCanceled)
+            return 0;  // Or return current evaluation
+    
+        // Periodic time check (less frequent than main search since qsearch is faster)
+        if (positionsEvaluated % 1500 == 0 && searchStopwatch.ElapsedMilliseconds > timeLimit)
+        {
+            searchCanceled = true;
+            return 0;
+        }
+        
         if (board.IsInCheckmate())
         {
             // Current player is checkmated - return negative
@@ -251,9 +262,17 @@ public class MainBot : IChessBot
         
         foreach (Move capture in captures)
         {
+            // Check cancellation before making a move
+            if (searchCanceled)
+                return evaluation;  // Return static eval when canceled
+            
             board.MakeMove(capture);
             int value = -QuiescenceSearch(board, -beta, -alpha);
             board.UndoMove(capture);
+            
+            // Check cancellation after recursive call
+            if (searchCanceled)
+                return evaluation;  // Return static eval when canceled
             
             if (value >= beta)
                 return beta;
