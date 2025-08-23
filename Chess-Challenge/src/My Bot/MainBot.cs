@@ -163,7 +163,7 @@ public class MainBot : IChessBot
             int value = -Search(board, depth - 1, -beta, -alpha, false);
             board.UndoMove(move);
             
-            if (searchCanceled)
+            if (searchCanceled) // TODO: TEST IF RETURNING 0 HERE IS BETTER
                 break;
             
             if (value > bestValue)
