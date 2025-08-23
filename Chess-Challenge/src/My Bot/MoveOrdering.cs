@@ -22,6 +22,11 @@ public class MoveOrdering
             score += 1000;
             score += Evaluation.PieceValues[(int)move.PromotionPieceType];
         }
+
+        if (move.IsCastles)
+        {
+            score += 800;
+        }
         
         if (move.IsCapture)
         {
