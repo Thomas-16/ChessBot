@@ -41,10 +41,10 @@ public class MainBot : IChessBot
         }
         
         // Book moves
-        // if (board.PlyCount <= 18 && openingBook.TryGetBookMove(board, out string moveString, 0.8)) {
-        //     if(!ChessChallenge.Application.Program.UCI_MODE) Console.WriteLine($"Book move found: {moveString}");
-        //     return new Move(moveString, board);
-        // }
+        if (board.PlyCount <= 18 && openingBook.TryGetBookMove(board, out string moveString, 0.8)) {
+            if(!ChessChallenge.Application.Program.UCI_MODE) Console.WriteLine($"Book move found: {moveString}");
+            return new Move(moveString, board);
+        }
         
         positionsEvaluated = 0;
         bestMoveThisIteration = Move.NullMove;
