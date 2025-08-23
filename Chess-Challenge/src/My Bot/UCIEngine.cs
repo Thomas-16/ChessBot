@@ -165,30 +165,48 @@ public class UCIEngine
         }
         
         // Parse time controls
-        int timeLimit = 5000; // Default 5 seconds
+        int? moveTime = null;
+        int? whiteTime = null;
+        int? blackTime = null;
+        int? whiteIncrement = null;
+        int? blackIncrement = null;
         
         for (int i = 1; i < parts.Length - 1; i++)
         {
             switch (parts[i].ToLower())
             {
                 case "wtime":
-                    if (board.IsWhiteToMove && int.TryParse(parts[i + 1], out int wtime))
+                    if (int.TryParse(parts[i + 1], out int wtime))
                     {
-                        timeLimit = Math.Min(wtime / 30, 5000); // Use 1/30th of remaining time, max 5s
+                        whiteTime = wtime;
                     }
                     break;
                     
                 case "btime":
-                    if (!board.IsWhiteToMove && int.TryParse(parts[i + 1], out int btime))
+                    if (int.TryParse(parts[i + 1], out int btime))
                     {
-                        timeLimit = Math.Min(btime / 30, 5000); // Use 1/30th of remaining time, max 5s
+                        blackTime = btime;
+                    }
+                    break;
+                    
+                case "winc":
+                    if (int.TryParse(parts[i + 1], out int winc))
+                    {
+                        whiteIncrement = winc;
+                    }
+                    break;
+                    
+                case "binc":
+                    if (int.TryParse(parts[i + 1], out int binc))
+                    {
+                        blackIncrement = binc;
                     }
                     break;
                     
                 case "movetime":
                     if (int.TryParse(parts[i + 1], out int movetime))
                     {
-                        timeLimit = movetime;
+                        moveTime = movetime;
                     }
                     break;
                     
@@ -198,10 +216,10 @@ public class UCIEngine
             }
         }
         
-        StartSearch(timeLimit);
+        StartSearch(moveTime, whiteTime, blackTime, whiteIncrement, blackIncrement);
     }
     
-    private void StartSearch(int timeLimit)
+    private void StartSearch(int? moveTime, int? whiteTime, int? blackTime, int? whiteIncrement, int? blackIncrement)
     {
         isSearching = true;
         shouldStop = false;
@@ -214,8 +232,25 @@ public class UCIEngine
         {
             try
             {
-                // Create a timer to respect the time limit
-                ChessChallenge.API.Timer timer = new ChessChallenge.API.Timer(timeLimit);
+                ChessChallenge.API.Timer timer;
+                
+                if (moveTime.HasValue)
+                {
+                    // Use exact movetime when provided
+                    timer = new ChessChallenge.API.Timer(moveTime.Value);
+                    bot.SetMoveTimeMode(moveTime.Value);
+                }
+                else
+                {
+                    // Use wtime/btime with MainBot's time calculation
+                    bool isWhite = board.IsWhiteToMove;
+                    int myTime = isWhite ? (whiteTime ?? 5000) : (blackTime ?? 5000);
+                    int opponentTime = isWhite ? (blackTime ?? 5000) : (whiteTime ?? 5000);
+                    int myIncrement = isWhite ? (whiteIncrement ?? 0) : (blackIncrement ?? 0);
+                    
+                    timer = new ChessChallenge.API.Timer(myTime, opponentTime, myTime, myIncrement);
+                    bot.SetTimerMode();
+                }
                 
                 bestMove = bot.Think(board, timer);
                 

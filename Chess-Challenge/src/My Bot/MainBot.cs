@@ -15,19 +15,36 @@ public class MainBot : IChessBot
     OpeningBook openingBook = new(LoadBookData());
     
     Stopwatch searchStopwatch;
-    int timeLimit = 200; // ms
-    bool useTimer = false;
+    
+    // Set timeLimit to 0 to use match Timer in GUI mode
+    int timeLimit = 0; // ms
+    bool useTimer;
+    bool useMoveTime;
+    bool guiModeIsTimerConfiged = false;
     bool searchCanceled;
     
     int positionsEvaluated;
     
     public Move Think(Board board, Timer timer)
     {
-        // Book moves
-        if (board.PlyCount <= 18 && openingBook.TryGetBookMove(board, out string moveString, 0.8)) {
-            if(!ChessChallenge.Application.Program.UCI_MODE) Console.WriteLine($"Book move found: {moveString}");
-            return new Move(moveString, board);
+        if (!ChessChallenge.Application.Program.UCI_MODE && !guiModeIsTimerConfiged)
+        {
+            if (timeLimit == 0)
+            {
+                SetTimerMode();
+            }
+            else
+            {
+                SetMoveTimeMode(timeLimit);
+            }
+            guiModeIsTimerConfiged = true;
         }
+        
+        // Book moves
+        // if (board.PlyCount <= 18 && openingBook.TryGetBookMove(board, out string moveString, 0.8)) {
+        //     if(!ChessChallenge.Application.Program.UCI_MODE) Console.WriteLine($"Book move found: {moveString}");
+        //     return new Move(moveString, board);
+        // }
         
         positionsEvaluated = 0;
         bestMoveThisIteration = Move.NullMove;
@@ -40,14 +57,16 @@ public class MainBot : IChessBot
         if (moveOrdering == null)
             moveOrdering = new MoveOrdering();
         
-        // Set time limit based on timer
-        if (useTimer) {
+        // Set time limit based on timer mode
+        if (useMoveTime) {
+            // timeLimit is already set correctly for movetime mode
+        } else if (useTimer) {
             int myTimeRemainingMs = timer.MillisecondsRemaining;
             int myIncrementMs = timer.IncrementMilliseconds;
             
             // Get a fraction of remaining time to use for current move
             double thinkTimeMs = myTimeRemainingMs / 40.0;
-            // Clamp think timee
+            // Clamp think time
             thinkTimeMs = Math.Min(5000, thinkTimeMs);
             // Add increment
             if (myTimeRemainingMs > myIncrementMs * 2) {
@@ -108,6 +127,19 @@ public class MainBot : IChessBot
         }
 
         return bestMove;
+    }
+    
+    public void SetMoveTimeMode(int moveTimeMs)
+    {
+        useMoveTime = true;
+        useTimer = false;
+        timeLimit = moveTimeMs;
+    }
+    
+    public void SetTimerMode()
+    {
+        useMoveTime = false;
+        useTimer = true;
     }
     
     int Search(Board board, int depth, int alpha, int beta, bool isRoot)
