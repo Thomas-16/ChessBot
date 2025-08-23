@@ -10,11 +10,10 @@ namespace ChessChallenge.Application
         const bool hideRaylibLogs = true;
         static Camera2D cam;
 
+        public static bool UCI_MODE = true;
+
         public static void Main(string[] args)
         {
-            // Check for UCI mode
-            bool UCI_MODE = false;
-            
             if (UCI_MODE)
             {
                 RunUCIMode();

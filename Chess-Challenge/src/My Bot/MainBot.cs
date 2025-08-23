@@ -25,7 +25,7 @@ public class MainBot : IChessBot
     {
         // Book moves
         if (board.PlyCount <= 18 && openingBook.TryGetBookMove(board, out string moveString, 0.8)) {
-            Console.WriteLine($"Book move found: {moveString}");
+            if(!ChessChallenge.Application.Program.UCI_MODE) Console.WriteLine($"Book move found: {moveString}");
             return new Move(moveString, board);
         }
         
@@ -97,13 +97,14 @@ public class MainBot : IChessBot
         }
         
         searchStopwatch.Stop();
-        Console.WriteLine($"Depth searched: {depthSearched}, Final move: {bestMove.ToString()}, Time took: {searchStopwatch.ElapsedMilliseconds}ms, " +
+        if(!ChessChallenge.Application.Program.UCI_MODE)
+            Console.WriteLine($"Depth searched: {depthSearched}, Final move: {bestMove.ToString()}, Time took: {searchStopwatch.ElapsedMilliseconds}ms, " +
                         $"Positions evaluated: {positionsEvaluated}, Score: {bestEval}");
 
         if (bestMove == Move.NullMove)
         {
             bestMove = board.GetLegalMoves()[0];
-            Console.WriteLine("Best move not found, using first legal move");
+            if(!ChessChallenge.Application.Program.UCI_MODE) Console.WriteLine("Best move not found, using first legal move");
         }
 
         return bestMove;
