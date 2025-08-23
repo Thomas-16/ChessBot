@@ -109,10 +109,8 @@ public class UCIEngine
                     try
                     {
                         Move move = new Move(parts[i], board);
-                        if (board.GetLegalMoves().Contains(move))
-                        {
-                            board.MakeMove(move);
-                        }
+                        
+                        board.MakeMove(move);
                     }
                     catch
                     {
@@ -138,10 +136,8 @@ public class UCIEngine
                         try
                         {
                             Move move = new Move(parts[i], board);
-                            if (board.GetLegalMoves().Contains(move))
-                            {
-                                board.MakeMove(move);
-                            }
+                            
+                            board.MakeMove(move);
                         }
                         catch
                         {
