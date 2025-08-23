@@ -297,6 +297,16 @@ namespace ChessChallenge.API
 		{
 			return BitboardHelper.SquareIsSet(moveGen.GetOpponentAttackMap(board), square);
 		}
+		
+		
+		/// <summary>
+		/// A ulong bitboard of squares the opponent can attack
+		/// (opponent being whichever player doesn't currently have the right to move)
+		/// </summary>
+		public ulong GetOpponentAttackMap()
+		{
+			return moveGen.GetOpponentAttackMap(board);
+		}
 
 
 		/// <summary>
