@@ -2,6 +2,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 
 public class MainBot : IChessBot
 {
@@ -11,8 +12,7 @@ public class MainBot : IChessBot
     TranspositionTable? transpositionTable;
     MoveOrdering? moveOrdering;
     
-    static readonly string openingBookPath = Path.Combine(ChessChallenge.Application.FileHelper.GetResourcePath(), "Book.txt");
-    OpeningBook openingBook = new(File.ReadAllText(openingBookPath));
+    OpeningBook openingBook = new(LoadBookData());
     
     Stopwatch searchStopwatch;
     int timeLimit = 200; // ms
@@ -230,5 +230,37 @@ public class MainBot : IChessBot
         }
         
         return alpha;
+    }
+    
+    private static string LoadBookData()
+    {
+        // Try external file first (for development/customization)
+        try
+        {
+            string filePath = Path.Combine(ChessChallenge.Application.FileHelper.GetResourcePath(), "Book.txt");
+            if (File.Exists(filePath))
+            {
+                return File.ReadAllText(filePath);
+            }
+        }
+        catch
+        {
+            // Fall through to embedded resource
+        }
+        
+        // Fall back to embedded resource
+        return LoadEmbeddedBookData();
+    }
+    
+    private static string LoadEmbeddedBookData()
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        using var stream = assembly.GetManifestResourceStream("Chess_Challenge.resources.Book.txt");
+        if (stream == null)
+        {
+            throw new FileNotFoundException("Book.txt not found as embedded resource or external file");
+        }
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 }
