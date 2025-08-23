@@ -87,6 +87,8 @@ public class MainBot : IChessBot
                 if (bestMoveThisIteration != Move.NullMove)
                 {
                     // Use the best move we've found so far in this iteration
+                    // This will be fine if we've at least searched one move
+                    // Since our move ordering will always put the best move found so far first
                     bestMove = bestMoveThisIteration;
                     bestEval = eval;
                 }
