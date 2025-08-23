@@ -46,7 +46,6 @@ public static class Evaluation
         }
         
         int evaluation = 0;
-        int totalPieces = 0;
         
         // Calculate game phase (0 = opening, 1 = endgame)
         // Based on remaining material
@@ -54,45 +53,42 @@ public static class Evaluation
         float endGameWeight = gamePhase / 256f;  // Convert to 0-1 range
         float openingWeight = 1f - endGameWeight;
         
-        PieceList[] allPieceLists = board.GetAllPieceLists();
-        
-        for (int i = 0; i < allPieceLists.Length; i++)
-        {
-            PieceList pieceList = allPieceLists[i];
-            PieceType pieceType = pieceList.TypeOfPieceInList;
-            int pieceValue = PieceValues[(int)pieceType];
-            bool isWhite = pieceList.IsWhitePieceList;
-            
-            totalPieces += pieceList.Count;
-            
-            // Material evaluation
-            int materialValue = pieceValue * pieceList.Count;
-            
-            // Piece-square table evaluation
-            int pstValue = 0;
-            for (int j = 0; j < pieceList.Count; j++)
-            {
-                Square square = pieceList[j].Square;
-                int squareIndex = GetSquareIndex(square, isWhite);
-                
-                // Get piece-square value with game phase blending
-                int pieceSquareValue = GetPieceSquareValue(pieceType, squareIndex, openingWeight, endGameWeight);
-                pstValue += pieceSquareValue;
-            }
-            
-            // Add to evaluation (positive for white, negative for black)
-            if (isWhite)
-            {
-                evaluation += materialValue + pstValue;
-            }
-            else
-            {
-                evaluation -= materialValue + pstValue;
-            }
-        }
-        
+        // Get all piece bitboards once for efficiency
         ulong whitePawns = board.GetPieceBitboard(PieceType.Pawn, true);
         ulong blackPawns = board.GetPieceBitboard(PieceType.Pawn, false);
+        ulong whiteKnights = board.GetPieceBitboard(PieceType.Knight, true);
+        ulong blackKnights = board.GetPieceBitboard(PieceType.Knight, false);
+        ulong whiteBishops = board.GetPieceBitboard(PieceType.Bishop, true);
+        ulong blackBishops = board.GetPieceBitboard(PieceType.Bishop, false);
+        ulong whiteRooks = board.GetPieceBitboard(PieceType.Rook, true);
+        ulong blackRooks = board.GetPieceBitboard(PieceType.Rook, false);
+        ulong whiteQueens = board.GetPieceBitboard(PieceType.Queen, true);
+        ulong blackQueens = board.GetPieceBitboard(PieceType.Queen, false);
+        
+        // Evaluate each piece type
+        evaluation += EvaluatePieceTypeBitboard(whitePawns, true, PieceType.Pawn, openingWeight, endGameWeight);
+        evaluation -= EvaluatePieceTypeBitboard(blackPawns, false, PieceType.Pawn, openingWeight, endGameWeight);
+        evaluation += EvaluatePieceTypeBitboard(whiteKnights, true, PieceType.Knight, openingWeight, endGameWeight);
+        evaluation -= EvaluatePieceTypeBitboard(blackKnights, false, PieceType.Knight, openingWeight, endGameWeight);
+        evaluation += EvaluatePieceTypeBitboard(whiteBishops, true, PieceType.Bishop, openingWeight, endGameWeight);
+        evaluation -= EvaluatePieceTypeBitboard(blackBishops, false, PieceType.Bishop, openingWeight, endGameWeight);
+        evaluation += EvaluatePieceTypeBitboard(whiteRooks, true, PieceType.Rook, openingWeight, endGameWeight);
+        evaluation -= EvaluatePieceTypeBitboard(blackRooks, false, PieceType.Rook, openingWeight, endGameWeight);
+        evaluation += EvaluatePieceTypeBitboard(whiteQueens, true, PieceType.Queen, openingWeight, endGameWeight);
+        evaluation -= EvaluatePieceTypeBitboard(blackQueens, false, PieceType.Queen, openingWeight, endGameWeight);
+        
+        // King evaluation - get squares and evaluate normally
+        Square whiteKing = board.GetKingSquare(true);
+        Square blackKing = board.GetKingSquare(false);
+        
+        int whiteKingSquareIndex = GetSquareIndex(whiteKing, true);
+        int blackKingSquareIndex = GetSquareIndex(blackKing, false);
+        
+        int whiteKingValue = GetPieceSquareValue(PieceType.King, whiteKingSquareIndex, openingWeight, endGameWeight);
+        int blackKingValue = GetPieceSquareValue(PieceType.King, blackKingSquareIndex, openingWeight, endGameWeight);
+        
+        evaluation += whiteKingValue - blackKingValue;
+
         ulong whitePieces = board.WhitePiecesBitboard;
         ulong blackPieces = board.BlackPiecesBitboard;
 
@@ -111,6 +107,30 @@ public static class Evaluation
         evaluation += EvaluateMopUp(board, evaluation, endGameWeight);
         
         return board.IsWhiteToMove ? evaluation : -evaluation;
+    }
+    
+    private static int EvaluatePieceTypeBitboard(ulong pieces, bool isWhite, PieceType pieceType, float openingWeight, float endGameWeight)
+    {
+        int evaluation = 0;
+        int pieceValue = PieceValues[(int)pieceType];
+        
+        // Material evaluation
+        int pieceCount = BitboardHelper.GetNumberOfSetBits(pieces);
+        evaluation += pieceValue * pieceCount;
+        
+        // Piece-square table evaluation using bitboard iteration
+        ulong piecesCopy = pieces;
+        while (piecesCopy != 0)
+        {
+            int squareIndex = BitboardHelper.ClearAndGetIndexOfLSB(ref piecesCopy);
+            int adjustedSquareIndex = GetSquareIndex(squareIndex, isWhite);
+            
+            // Get piece-square value with game phase blending
+            int pieceSquareValue = GetPieceSquareValue(pieceType, adjustedSquareIndex, openingWeight, endGameWeight);
+            evaluation += pieceSquareValue;
+        }
+        
+        return evaluation;
     }
     
     private static int CalculateGamePhase(Board board)
@@ -168,6 +188,20 @@ public static class Evaluation
         }
         
         return index;
+    }
+    
+    private static int GetSquareIndex(int squareIndex, bool isWhite)
+    {
+        if (!isWhite)
+        {
+            // Flip rank for black pieces
+            int rank = squareIndex / 8;
+            int file = squareIndex % 8;
+            int flippedRank = 7 - rank;
+            return flippedRank * 8 + file;
+        }
+        
+        return squareIndex;
     }
     
     private static int GetPieceSquareValue(PieceType pieceType, int squareIndex, float openingWeight, float endGameWeight)
