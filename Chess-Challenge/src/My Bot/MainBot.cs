@@ -75,6 +75,9 @@ public class MainBot : IChessBot
 
             double minThinkTime = Math.Min(50, myTimeRemainingMs * 0.25);
             timeLimit = (int) Math.Ceiling(Math.Max(minThinkTime, thinkTimeMs));
+            
+            // To make sure we don't go past the allowed time
+            timeLimit -= 10;
         }
         
         searchStopwatch = Stopwatch.StartNew();
@@ -133,7 +136,7 @@ public class MainBot : IChessBot
     {
         useMoveTime = true;
         useTimer = false;
-        timeLimit = moveTimeMs;
+        timeLimit = moveTimeMs - 10; // To make sure we don't go past the allowed time
     }
     
     public void SetTimerMode()
