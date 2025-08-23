@@ -77,7 +77,7 @@ public class MainBot : IChessBot
             timeLimit = (int) Math.Ceiling(Math.Max(minThinkTime, thinkTimeMs));
             
             // To make sure we don't go past the allowed time
-            timeLimit -= (ChessChallenge.Application.Program.UCI_MODE ? 30 : 10);
+            timeLimit -= (ChessChallenge.Application.Program.UCI_MODE ? 25 : 0);
         }
         
         searchStopwatch = Stopwatch.StartNew();
@@ -136,7 +136,7 @@ public class MainBot : IChessBot
     {
         useMoveTime = true;
         useTimer = false;
-        timeLimit = moveTimeMs - (ChessChallenge.Application.Program.UCI_MODE ? 30 : 10); // To make sure we don't go past the allowed time
+        timeLimit = moveTimeMs - (ChessChallenge.Application.Program.UCI_MODE ? 25 : 0); // To make sure we don't go past the allowed time
     }
     
     public void SetTimerMode()
