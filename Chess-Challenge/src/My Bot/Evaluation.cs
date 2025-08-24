@@ -89,15 +89,15 @@ public static class Evaluation
         
         evaluation += whiteKingValue - blackKingValue;
 
-        ulong whitePieces = board.WhitePiecesBitboard;
-        ulong blackPieces = board.BlackPiecesBitboard;
+        ulong whitePiecesWithoutKing = board.WhitePiecesBitboard & ~board.GetPieceBitboard(PieceType.King, true);
+        ulong blackPiecesWithoutKing = board.BlackPiecesBitboard & ~board.GetPieceBitboard(PieceType.King, false);
 
         // Center control
         int pawnCenterControlScore = 10;
         int pieceCenterControlScore = 8;
-        int whiteCenterControl = BitboardHelper.GetNumberOfSetBits((whitePieces & ~whitePawns) & centerSquares) * pieceCenterControlScore
+        int whiteCenterControl = BitboardHelper.GetNumberOfSetBits((whitePiecesWithoutKing & ~whitePawns) & centerSquares) * pieceCenterControlScore
                                  + BitboardHelper.GetNumberOfSetBits(whitePawns & centerSquares) * pawnCenterControlScore;
-        int blackCenterControl = BitboardHelper.GetNumberOfSetBits((blackPieces & ~blackPawns) & centerSquares) * pieceCenterControlScore
+        int blackCenterControl = BitboardHelper.GetNumberOfSetBits((blackPiecesWithoutKing & ~blackPawns) & centerSquares) * pieceCenterControlScore
                                  + BitboardHelper.GetNumberOfSetBits(blackPawns & centerSquares) * pawnCenterControlScore;
 
         // Apply with opening weight (important early, less important in endgame)
