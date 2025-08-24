@@ -25,7 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Update="src\My Bot\MainBot.cs">
+    <Compile Update="src\Main Bot\MainBot.cs">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Compile>
     <Compile Update="src\Evil Bot\TestBot.cs">
