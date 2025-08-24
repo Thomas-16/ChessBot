@@ -21,7 +21,6 @@ public class MoveOrdering
     public void OrderMoves(Board board, ref Span<Move> moves, Move hashMove = default)
     {
         ulong oppAttacks = board.GetOpponentAttackMap();
-        // ulong oppPawnAttacks = GetPawnAttacks(board, !board.IsWhiteToMove);
         
         // Calculate game phase (0 = opening, 1 = endgame)
         // Based on remaining material
@@ -94,18 +93,6 @@ public class MoveOrdering
         
         Quicksort(moves, moveScores, 0, moves.Length - 1);
     }
-
-    // ulong GetPawnAttacks(Board board, bool isWhite)
-    // {
-    //     ulong pawnAttacks = 0UL;
-    //     PieceList pawns = board.GetPieceList(PieceType.Pawn, isWhite);
-    //     foreach (Piece pawn in pawns)
-    //     {
-    //         pawnAttacks |= BitboardHelper.GetPawnAttacks(pawn.Square, isWhite);
-    //     }
-    //     
-    //     return pawnAttacks;
-    // }
 
     int GetPieceValue(PieceType pieceType)
     {
