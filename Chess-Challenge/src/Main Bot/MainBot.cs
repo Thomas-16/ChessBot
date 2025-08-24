@@ -97,6 +97,8 @@ public class MainBot : IChessBot
                 bestMove = bestMoveThisIteration;
                 bestEval = eval;
                 
+                bestMoveThisIteration = Move.NullMove;
+                
                 // Stop if we found a winning checkmate for us
                 if (eval > 29000)  // We're delivering mate
                 {
