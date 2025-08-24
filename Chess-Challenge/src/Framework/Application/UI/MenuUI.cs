@@ -53,6 +53,13 @@ namespace ChessChallenge.Application
             {
                 Program.SetWindowSize(isBigWindow ? Settings.ScreenSizeSmall : Settings.ScreenSizeBig);
             }
+            
+            string soundButtonName = Settings.EnableSounds ? "Sound: ON" : "Sound: OFF";
+            if (NextButtonInRow(soundButtonName, ref buttonPos, spacing, buttonSize))
+            {
+                Settings.EnableSounds = !Settings.EnableSounds;
+            }
+            
             if (NextButtonInRow("Exit (ESC)", ref buttonPos, spacing, buttonSize))
             {
                 Environment.Exit(0);
