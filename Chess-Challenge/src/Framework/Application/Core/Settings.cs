@@ -17,6 +17,9 @@ namespace ChessChallenge.Application
         public static readonly Vector2 ScreenSizeSmall = new(1280, 720);
         public static readonly Vector2 ScreenSizeBig = new(1920, 1080);
 
+        // Audio settings
+        public const bool EnableSounds = true;
+
         // Other settings
         public const LogType MessagesToLog = LogType.All;
 

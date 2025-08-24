@@ -46,6 +46,8 @@ namespace ChessChallenge.Application
             Raylib.InitWindow(screenWidth, screenHeight, "Chess AI");
             Raylib.SetTargetFPS(60);
 
+            AudioManager.Instance.Initialize();
+
             UpdateCamera(screenWidth, screenHeight);
 
             ChallengeController controller = new();
@@ -70,6 +72,7 @@ namespace ChessChallenge.Application
 
             controller.Release();
             UIHelper.Release();
+            AudioManager.Instance.Cleanup();
         }
 
         public static void SetWindowSize(Vector2 size)

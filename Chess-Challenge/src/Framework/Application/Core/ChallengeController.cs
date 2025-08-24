@@ -256,8 +256,21 @@ namespace ChessChallenge.Application
                 bool animate = PlayerToMove.IsBot;
                 lastMoveMadeTime = (float)Raylib.GetTime();
 
+                // Check if this move is a capture before making the move
+                bool isCapture = move.IsEnPassant || board.Square[move.TargetSquareIndex] != PieceHelper.None;
+
                 board.MakeMove(move, false);
                 boardUI.UpdatePosition(board, move, animate);
+
+                // Play appropriate sound effect
+                if (isCapture)
+                {
+                    AudioManager.Instance.PlayCaptureSound();
+                }
+                else
+                {
+                    AudioManager.Instance.PlayMoveSound();
+                }
 
                 GameResult result = Arbiter.GetGameState(board);
                 if (result == GameResult.InProgress)
