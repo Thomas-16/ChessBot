@@ -133,7 +133,7 @@ public static class Evaluation
         return evaluation;
     }
     
-    private static int CalculateGamePhase(Board board)
+    public static int CalculateGamePhase(Board board)
     {
         // Game phase calculation based on remaining material
         // Start at 256 (opening) and decrease as pieces are captured
@@ -172,7 +172,7 @@ public static class Evaluation
         return Math.Max(0, Math.Min(256, phase));
     }
     
-    private static int GetSquareIndex(Square square, bool isWhite)
+    public static int GetSquareIndex(Square square, bool isWhite)
     {
         // For white, use normal index (a1=0, h8=63)
         // For black, flip the board vertically (a8=0, h1=63)
@@ -190,7 +190,7 @@ public static class Evaluation
         return index;
     }
     
-    private static int GetSquareIndex(int squareIndex, bool isWhite)
+    public static int GetSquareIndex(int squareIndex, bool isWhite)
     {
         if (!isWhite)
         {
@@ -204,7 +204,7 @@ public static class Evaluation
         return squareIndex;
     }
     
-    private static int GetPieceSquareValue(PieceType pieceType, int squareIndex, float openingWeight, float endGameWeight)
+    public static int GetPieceSquareValue(PieceType pieceType, int squareIndex, float openingWeight, float endGameWeight)
     {
         int openingValue = 0;
         int endgameValue = 0;
