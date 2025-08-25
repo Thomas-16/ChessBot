@@ -243,7 +243,7 @@ public class MainBot : IChessBot
         board.GetLegalMovesNonAlloc(ref movesSpan);
         moveOrdering.OrderMoves(board, ref movesSpan, ttMove);
         
-        Move bestMoveThisPosition = movesSpan.Length > 0 ? movesSpan[0] : Move.NullMove;
+        Move bestMoveThisPosition = Move.NullMove;
         int bestScore = int.MinValue;
         
         foreach (Move move in movesSpan)
