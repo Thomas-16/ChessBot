@@ -53,6 +53,7 @@ public class MainBot : IChessBot
         bestMoveThisIteration = Move.NullMove;
         bestMove = Move.NullMove;
         searchCanceledImmediately = false;
+        searchCanceledAfterIteration = false;
         
         if (transpositionTable == null)
             transpositionTable = new TranspositionTable(64);
@@ -85,15 +86,29 @@ public class MainBot : IChessBot
             softTimeLimit -= (ChessChallenge.Application.Program.UCI_MODE ? uciModeTimeReducion : 0);
 
             // Allow the bot to go a bit past the soft limit to finish the iteration
-            int timeLimitLenience = 100;
-            if (softTimeLimit + timeLimitLenience < myTimeRemainingMs)
-            {
-                hardTimeLimit = softTimeLimit + timeLimitLenience;
+            // Base extension: 30% of soft limit, but scale down under time pressure
+            double extensionPercent;
+            if (myTimeRemainingMs < 5000) {
+                extensionPercent = 0.1;  // 10% when very low on time
+            } else if (myTimeRemainingMs < 30000) {
+                extensionPercent = 0.2;  // 20% when moderately low
+            } else {
+                extensionPercent = 0.3;  // 30% when comfortable on time
             }
-            else
-            {
-                hardTimeLimit = softTimeLimit;
-            }
+    
+            int extension = (int)(softTimeLimit * extensionPercent);
+    
+            // Cap extension at 500ms max and ensure minimum 25ms
+            extension = Math.Clamp(extension, 25, 500);
+    
+            // Make sure we don't exceed remaining time minus safety buffer
+            int safetyBuffer = Math.Max(50, myTimeRemainingMs / 20);
+            int maxAllowedTime = myTimeRemainingMs - safetyBuffer;
+    
+            hardTimeLimit = Math.Min(softTimeLimit + extension, maxAllowedTime);
+    
+            // Ensure hard limit is at least slightly higher than soft
+            hardTimeLimit = Math.Max(hardTimeLimit, softTimeLimit + 10);
         }
         
         searchStopwatch = Stopwatch.StartNew();
@@ -104,6 +119,12 @@ public class MainBot : IChessBot
         // Iterative deepening loop
         for (int depth = 1; depth <= 256; depth++)
         {
+            // Don't start a new iteration if the soft limit is hit
+            if (searchStopwatch.ElapsedMilliseconds > softTimeLimit)
+            {
+                break;
+            }
+            
             int eval = Search(board, depth, -9999999, 9999999, true);
             depthSearched++;
             
@@ -121,14 +142,14 @@ public class MainBot : IChessBot
                     break;
                 }
                 
-                // Stop if we hit soft time limit
-                if (searchCanceledImmediately)
+                // Stop if we hit soft time limit (iteration completed)
+                if (searchCanceledAfterIteration)
                 {
                     break;
                 }
             }
             else
-            // Search cancelled mid-search
+            // Search cancelled mid-search (hard limit hit)
             {
                 if (bestMoveThisIteration != Move.NullMove)
                 {
@@ -178,13 +199,13 @@ public class MainBot : IChessBot
             if (searchStopwatch.ElapsedMilliseconds > hardTimeLimit)
             {
                 searchCanceledImmediately = true;
-                return 0; // Return immediately if time is up
-            } 
+                return 0;
+            }
             // Hit soft limit
-            // Don't return yet
             if (searchStopwatch.ElapsedMilliseconds > softTimeLimit)
             {
                 searchCanceledAfterIteration = true;
+                // Don't return - let iteration complete
             }
         }
         
