@@ -263,6 +263,10 @@ public class MainBot : IChessBot
                 {
                     extension = 1;
                 }
+                else if (move.MovePieceType == PieceType.Pawn && (move.TargetSquare.Rank == 6 || move.TargetSquare.Rank == 1))
+                {
+                    extension = 1;
+                }
             }
             
             int score = -Search(board, depth - 1, -beta, -alpha, false, numExtensions + extension);
