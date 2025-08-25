@@ -202,7 +202,7 @@ public class MainBot : IChessBot
                 return 0;
             }
             // Hit soft limit
-            if (searchStopwatch.ElapsedMilliseconds > softTimeLimit)
+            if (useTimer && searchStopwatch.ElapsedMilliseconds > softTimeLimit)
             {
                 searchCanceledAfterIteration = true;
                 // Don't return - let iteration complete
