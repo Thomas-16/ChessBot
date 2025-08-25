@@ -15,6 +15,8 @@ public class MainBot : IChessBot
     OpeningBook openingBook = new(LoadBookData());
     
     Stopwatch searchStopwatch;
+
+    const int maxExtensions = 16;
     
     // Set hardTimeLimit to 0 to use match Timer in GUI mode
     int hardTimeLimit = 200; // ms
@@ -190,7 +192,7 @@ public class MainBot : IChessBot
         useTimer = true;
     }
     
-    int Search(Board board, int depth, int alpha, int beta, bool isRoot)
+    int Search(Board board, int depth, int alpha, int beta, bool isRoot, int numExtensions = 0)
     {
         // Check time limit periodically (not every node to avoid overhead)
         if (positionsEvaluated % 1000 == 0)
@@ -252,7 +254,18 @@ public class MainBot : IChessBot
                 break;
                 
             board.MakeMove(move);
-            int score = -Search(board, depth - 1, -beta, -alpha, false);
+            
+            // Extend the depth of the search in certain interesting cases
+            int extension = 0;
+            if (numExtensions < maxExtensions)
+            {
+                if (board.IsInCheck())
+                {
+                    extension = 1;
+                }
+            }
+            
+            int score = -Search(board, depth - 1, -beta, -alpha, false, numExtensions + extension);
             board.UndoMove(move);
             
             if (searchCanceledImmediately)
