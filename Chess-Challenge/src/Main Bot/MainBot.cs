@@ -17,7 +17,7 @@ public class MainBot : IChessBot
     Stopwatch searchStopwatch;
     
     // Set hardTimeLimit to 0 to use match Timer in GUI mode
-    int hardTimeLimit = 0; // ms
+    int hardTimeLimit = 200; // ms
     int softTimeLimit;
     bool useTimer;
     bool useMoveTime;
@@ -94,8 +94,6 @@ public class MainBot : IChessBot
             {
                 hardTimeLimit = softTimeLimit;
             }
-            Console.WriteLine($"Hard limit: {hardTimeLimit}");
-            Console.WriteLine($"Soft limit: {softTimeLimit}");
         }
         
         searchStopwatch = Stopwatch.StartNew();
@@ -126,14 +124,12 @@ public class MainBot : IChessBot
                 // Stop if we hit soft time limit
                 if (searchCanceledImmediately)
                 {
-                    Console.WriteLine("Iteration finished and hit soft limit so exiting");
                     break;
                 }
             }
             else
             // Search cancelled mid-search
             {
-                Console.WriteLine("Search canceled after hitting hard limit");
                 if (bestMoveThisIteration != Move.NullMove)
                 {
                     // Use the best move we've found so far in this iteration
