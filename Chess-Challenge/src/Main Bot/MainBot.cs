@@ -192,7 +192,7 @@ public class MainBot : IChessBot
         moveOrdering.OrderMoves(board, ref movesSpan, ttMove);
         
         Move bestMoveThisPosition = movesSpan.Length > 0 ? movesSpan[0] : Move.NullMove;
-        int bestValue = int.MinValue;
+        int bestScore = int.MinValue;
         
         foreach (Move move in movesSpan)
         {
@@ -200,19 +200,19 @@ public class MainBot : IChessBot
                 break;
                 
             board.MakeMove(move);
-            int value = -Search(board, depth - 1, -beta, -alpha, false);
+            int score = -Search(board, depth - 1, -beta, -alpha, false);
             board.UndoMove(move);
             
             if (searchCanceled)
                 break;
             
-            if (value > bestValue)
+            if (score > bestScore)
             {
-                bestValue = value;
+                bestScore = score;
                 bestMoveThisPosition = move;
             }
             
-            alpha = Math.Max(alpha, value);
+            alpha = Math.Max(alpha, score);
             if (beta <= alpha)
                 break;
         }
@@ -220,16 +220,16 @@ public class MainBot : IChessBot
         // Only store in TT if search wasn't interrupted
         if (!searchCanceled)
         {
-            NodeType nodeType = bestValue <= originalAlpha ? NodeType.UpperBound :
-                               bestValue >= beta ? NodeType.LowerBound : NodeType.Exact;
+            NodeType nodeType = bestScore <= originalAlpha ? NodeType.UpperBound :
+                               bestScore >= beta ? NodeType.LowerBound : NodeType.Exact;
             
-            transpositionTable.StoreEntry(zobristKey, bestValue, depth, nodeType, bestMoveThisPosition);
+            transpositionTable.StoreEntry(zobristKey, bestScore, depth, nodeType, bestMoveThisPosition);
             
             if (isRoot)
                 bestMoveThisIteration = bestMoveThisPosition;
         }
             
-        return bestValue;
+        return bestScore;
     }
     
     int QuiescenceSearch(Board board, int alpha, int beta)
