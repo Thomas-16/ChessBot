@@ -31,6 +31,8 @@ public static class Evaluation
                           | ((ulong)1 << new Square("e3").Index)
                           | ((ulong)1 << new Square("d6").Index)
                           | ((ulong)1 << new Square("e6").Index);
+    
+    static readonly int[] passedPawnBonuses = { 0, 120, 80, 50, 30, 15, 15 }; // bonus given to a passed pawn based on how close it is to promoting
 
     public static int Evaluate(Board board)
     {
@@ -99,6 +101,11 @@ public static class Evaluation
                                  + BitboardHelper.GetNumberOfSetBits(whitePawns & centerSquares) * pawnCenterControlScore;
         int blackCenterControl = BitboardHelper.GetNumberOfSetBits((blackPiecesWithoutKing & ~blackPawns) & centerSquares) * pieceCenterControlScore
                                  + BitboardHelper.GetNumberOfSetBits(blackPawns & centerSquares) * pawnCenterControlScore;
+        
+        // Passed pawns
+        int whitePassedPawnsBonus = EvaluatePassedPawns(whitePawns, blackPawns, true);
+        int blackPassedPawnsBonus = EvaluatePassedPawns(blackPawns, whitePawns, false);
+        evaluation += whitePassedPawnsBonus - blackPassedPawnsBonus;
 
         // Apply with opening weight (important early, less important in endgame)
         evaluation += (int)((whiteCenterControl - blackCenterControl) * openingWeight);
@@ -128,6 +135,29 @@ public static class Evaluation
             // Get piece-square value with game phase blending
             int pieceSquareValue = GetPieceSquareValue(pieceType, adjustedSquareIndex, openingWeight, endGameWeight);
             evaluation += pieceSquareValue;
+        }
+        
+        return evaluation;
+    }
+    
+    private static int EvaluatePassedPawns(ulong ownPawns, ulong opponentPawns, bool isWhite)
+    {
+        int evaluation = 0;
+        
+        ulong pawnsCopy = ownPawns;
+        while (pawnsCopy != 0)
+        {
+            int squareIndex = BitboardHelper.ClearAndGetIndexOfLSB(ref pawnsCopy);
+            ulong passedPawnMask = isWhite ? PrecomputedEvalData.WhitePassedPawnMask[squareIndex] : PrecomputedEvalData.BlackPassedPawnMask[squareIndex];
+            
+            // If no enemy pawns can block or capture this pawn, it's passed
+            if ((passedPawnMask & opponentPawns) == 0)
+            {
+                // Bonus based on how advanced the pawn is
+                int rank = squareIndex / 8;
+                int bonus = isWhite ? passedPawnBonuses[7 - rank] : passedPawnBonuses[rank];
+                evaluation += bonus;
+            }
         }
         
         return evaluation;
