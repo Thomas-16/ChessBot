@@ -24,8 +24,7 @@ public class MoveOrdering
         
         // Calculate game phase (0 = opening, 1 = endgame)
         // Based on remaining material
-        int gamePhase = Evaluation.CalculateGamePhase(board);
-        float endGameWeight = gamePhase / 256f;  // Convert to 0-1 range
+        float endGameWeight = Evaluation.CalculateGamePhase(board);
         float openingWeight = 1f - endGameWeight;
 
         for (int i = 0; i < moves.Length; i++)

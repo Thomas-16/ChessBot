@@ -51,8 +51,7 @@ public static class Evaluation
         
         // Calculate game phase (0 = opening, 1 = endgame)
         // Based on remaining material
-        int gamePhase = CalculateGamePhase(board);
-        float endGameWeight = gamePhase / 256f;  // Convert to 0-1 range
+        float endGameWeight = CalculateGamePhase(board);
         float openingWeight = 1f - endGameWeight;
         
         // Get all piece bitboards once for efficiency
@@ -163,43 +162,50 @@ public static class Evaluation
         return evaluation;
     }
     
-    public static int CalculateGamePhase(Board board)
+    // There's some funky math in here
+    public static float CalculateGamePhase(Board board)
     {
-        // Game phase calculation based on remaining material
-        // Start at 256 (opening) and decrease as pieces are captured
-        int phase = 256;
-        
+        // Count all material on the board (excluding kings)
+        int totalMaterial = 0;
+    
         PieceList[] allPieceLists = board.GetAllPieceLists();
-        
+    
         for (int i = 0; i < allPieceLists.Length; i++)
         {
             PieceList pieceList = allPieceLists[i];
             PieceType pieceType = pieceList.TypeOfPieceInList;
-            
-            // Subtract phase value for each piece
-            // Knights and Bishops reduce phase by 16
-            // Rooks reduce phase by 32
-            // Queens reduce phase by 64
-            // Pawns don't affect phase (encourage pawn endgames)
-            // Kings don't affect phase
-            
+        
+            // Add material value for each piece type
             switch (pieceType)
             {
+                case PieceType.Pawn:
+                    totalMaterial += pieceList.Count * 1;  // Pawns = 1 phase point
+                    break;
                 case PieceType.Knight:
                 case PieceType.Bishop:
-                    phase -= pieceList.Count * 16;
+                    totalMaterial += pieceList.Count * 3;  // Minor pieces = 3 phase points
                     break;
                 case PieceType.Rook:
-                    phase -= pieceList.Count * 32;
+                    totalMaterial += pieceList.Count * 5;  // Rooks = 5 phase points
                     break;
                 case PieceType.Queen:
-                    phase -= pieceList.Count * 64;
+                    totalMaterial += pieceList.Count * 9;  // Queens = 9 phase points
                     break;
+                // Kings are excluded
             }
         }
-        
-        // Clamp to valid range [0, 256]
-        return Math.Max(0, Math.Min(256, phase));
+    
+        const int startingMaterial = 75;
+    
+        // Map material count to phase (1.0 = opening, 0.0 = endgame)
+        float phase = (float)totalMaterial / startingMaterial;
+        phase = 1 - phase;
+
+        if (phase > 0.5f)
+            phase *= 1.2f;
+    
+        // Clamp to valid range [0, 1]
+        return Math.Max(0f, Math.Min(1f, phase));
     }
     
     public static int GetSquareIndex(Square square, bool isWhite)
