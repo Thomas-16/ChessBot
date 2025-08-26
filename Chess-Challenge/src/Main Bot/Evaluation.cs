@@ -102,10 +102,10 @@ public static class Evaluation
         int blackCenterControl = BitboardHelper.GetNumberOfSetBits((blackPiecesWithoutKing & ~blackPawns) & centerSquares) * pieceCenterControlScore
                                  + BitboardHelper.GetNumberOfSetBits(blackPawns & centerSquares) * pawnCenterControlScore;
         
-        // Passed pawns
-        int whitePassedPawnsBonus = EvaluatePassedPawns(whitePawns, blackPawns, true);
-        int blackPassedPawnsBonus = EvaluatePassedPawns(blackPawns, whitePawns, false);
-        evaluation += whitePassedPawnsBonus - blackPassedPawnsBonus;
+        // Passed pawns and isolated pawns
+        int whitePawnScore = EvaluatePassedAndIsolatedPawns(whitePawns, blackPawns, true);
+        int blackPawnScore = EvaluatePassedAndIsolatedPawns(blackPawns, whitePawns, false);
+        evaluation += whitePawnScore - blackPawnScore;
 
         // Apply with opening weight (important early, less important in endgame)
         evaluation += (int)((whiteCenterControl - blackCenterControl) * openingWeight);
@@ -140,7 +140,7 @@ public static class Evaluation
         return evaluation;
     }
     
-    private static int EvaluatePassedPawns(ulong ownPawns, ulong opponentPawns, bool isWhite)
+    private static int EvaluatePassedAndIsolatedPawns(ulong ownPawns, ulong opponentPawns, bool isWhite)
     {
         int evaluation = 0;
         
