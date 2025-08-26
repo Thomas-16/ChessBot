@@ -206,7 +206,7 @@ public static class Evaluation
     
         const int startingMaterial = 75;
     
-        // Map material count to phase (1.0 = opening, 0.0 = endgame)
+        // Map material count to phase (0.0 = opening, 1.0 = endgame)
         float phase = (float)totalMaterial / startingMaterial;
         phase = 1 - phase;
 
