@@ -33,6 +33,7 @@ public static class Evaluation
                           | ((ulong)1 << new Square("e6").Index);
     
     static readonly int[] passedPawnBonuses = { 0, 120, 80, 50, 30, 15, 15 }; // bonus given to a passed pawn based on how close it is to promoting
+    static readonly int[] isolatedPawnPenaltyByCount = { 0, -10, -25, -50, -75, -75, -75, -75, -75 };
 
     public static int Evaluate(Board board)
     {
@@ -142,6 +143,7 @@ public static class Evaluation
     private static int EvaluatePassedAndIsolatedPawns(ulong ownPawns, ulong opponentPawns, bool isWhite)
     {
         int evaluation = 0;
+        int numIsolatedPawns = 0;
         
         ulong pawnsCopy = ownPawns;
         while (pawnsCopy != 0)
@@ -157,7 +159,14 @@ public static class Evaluation
                 int bonus = isWhite ? passedPawnBonuses[7 - rank] : passedPawnBonuses[rank];
                 evaluation += bonus;
             }
+            
+            // Is isolated pawn
+            if ((ownPawns & PrecomputedEvalData.AdjacentFilesMask[FileIndex(squareIndex)]) == 0)
+            {
+                numIsolatedPawns++;
+            }
         }
+        evaluation += isolatedPawnPenaltyByCount[numIsolatedPawns];
         
         return evaluation;
     }
@@ -310,4 +319,9 @@ public static class Evaluation
         return 0;
     }
     
+    // Helpers
+    private static int FileIndex(int squareIndex)
+    {
+        return squareIndex & 0b000111;
+    }
 }
