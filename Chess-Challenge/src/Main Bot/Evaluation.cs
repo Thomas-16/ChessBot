@@ -80,11 +80,11 @@ public static class Evaluation
         evaluation -= EvaluatePieceTypeBitboard(blackQueens, false, PieceType.Queen, openingWeight, endGameWeight);
         
         // King evaluation - get squares and evaluate normally
-        Square whiteKing = board.GetKingSquare(true);
-        Square blackKing = board.GetKingSquare(false);
+        Square whiteKingSquare = board.GetKingSquare(true);
+        Square blackKingSquare = board.GetKingSquare(false);
         
-        int whiteKingSquareIndex = GetSquareIndex(whiteKing, true);
-        int blackKingSquareIndex = GetSquareIndex(blackKing, false);
+        int whiteKingSquareIndex = GetSquareIndex(whiteKingSquare, true);
+        int blackKingSquareIndex = GetSquareIndex(blackKingSquare, false);
         
         int whiteKingValue = GetPieceSquareValue(PieceType.King, whiteKingSquareIndex, openingWeight, endGameWeight);
         int blackKingValue = GetPieceSquareValue(PieceType.King, blackKingSquareIndex, openingWeight, endGameWeight);
@@ -111,7 +111,7 @@ public static class Evaluation
         evaluation += (int)((whiteCenterControl - blackCenterControl) * openingWeight);
         
         // Mop-up evaluation for endgame
-        evaluation += EvaluateMopUp(board, evaluation, endGameWeight);
+        evaluation += EvaluateMopUp(whiteKingSquare, blackKingSquare, evaluation, endGameWeight);
         
         return board.IsWhiteToMove ? evaluation : -evaluation;
     }
@@ -288,30 +288,27 @@ public static class Evaluation
         return (int)(openingValue * openingWeight + endgameValue * endGameWeight);
     }
 
-    private static int EvaluateMopUp(Board board, int evaluation, float endGameWeight)
+    private static int EvaluateMopUp(Square whiteKingSquare, Square blackKingSquare, int evaluation, float endGameWeight)
     {
         if (endGameWeight <= 0.1f)
             return 0;
         
-        Square whiteKing = board.GetKingSquare(true);
-        Square blackKing = board.GetKingSquare(false);
-        
-        int whiteKingFile = whiteKing.File;
-        int whiteKingRank = whiteKing.Rank;
-        int blackKingFile = blackKing.File;
-        int blackKingRank = blackKing.Rank;
+        int whiteKingFile = whiteKingSquare.File;
+        int whiteKingRank = whiteKingSquare.Rank;
+        int blackKingFile = blackKingSquare.File;
+        int blackKingRank = blackKingSquare.Rank;
         
         int kingDistance = Math.Abs(whiteKingFile - blackKingFile) + Math.Abs(whiteKingRank - blackKingRank);
         
         if (evaluation > 200)
         {
-            int blackKingToEdge = DistanceFromCenterTable[blackKing.Index];
+            int blackKingToEdge = DistanceFromCenterTable[blackKingSquare.Index];
             int mopUpScore = blackKingToEdge * 20 + (7 - kingDistance) * 10;
             return (int)(mopUpScore * endGameWeight);
         }
         if (evaluation < -200)
         {
-            int whiteKingToEdge = DistanceFromCenterTable[whiteKing.Index];
+            int whiteKingToEdge = DistanceFromCenterTable[whiteKingSquare.Index];
             int mopUpScore = whiteKingToEdge * 20 + (7 - kingDistance) * 10;
             return -(int)(mopUpScore * endGameWeight);
         }
