@@ -16,7 +16,7 @@ public class MainBot : IChessBot
     
     Stopwatch searchStopwatch;
 
-    const int maxExtensions = 16;
+    const int maxExtensions = 13;
     
     // Set hardTimeLimit to 0 to use match Timer in GUI mode
     int hardTimeLimit = 200; // ms
