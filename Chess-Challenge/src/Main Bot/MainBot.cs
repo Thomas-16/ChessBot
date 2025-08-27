@@ -269,7 +269,7 @@ public class MainBot : IChessBot
                 }
             }
             
-            int score = -Search(board, depth - 1, -beta, -alpha, false, numExtensions + extension);
+            int score = -Search(board, depth - 1 + extension, -beta, -alpha, false, numExtensions + extension);
             board.UndoMove(move);
             
             if (searchCanceledImmediately)
