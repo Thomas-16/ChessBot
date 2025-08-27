@@ -59,3 +59,4 @@ nunit-*.xml
 .DS_Store
 Chess-Challenge/src/.DS_Store
 /builds
+output.pgn
