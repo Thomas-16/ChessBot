@@ -46,7 +46,6 @@ public static class Evaluation
     
     static readonly int[] passedPawnBonuses = { 0, 120, 80, 50, 30, 15, 15 }; // bonus given to a passed pawn based on how close it is to promoting
     static readonly int[] isolatedPawnPenaltyByCount = { 0, -10, -25, -50, -75, -75, -75, -75, -75 };
-    static readonly int[] doubledPawnPenaltyByCount = { 0, -15, -30, -55, -80, -80, -80, -80, -80 };
 
     public static int Evaluate(Board board)
     {
@@ -115,18 +114,13 @@ public static class Evaluation
         int blackCenterControl = BitboardHelper.GetNumberOfSetBits((blackPiecesWithoutKing & ~blackPawns) & centerSquares) * pieceCenterControlScore
                                  + BitboardHelper.GetNumberOfSetBits(blackPawns & centerSquares) * pawnCenterControlScore;
         
+        // Apply with opening weight (important early, less important in endgame)
+        evaluation += (int)((whiteCenterControl - blackCenterControl) * openingWeight);
+        
         // Passed pawns and isolated pawns
         int whitePawnScore = EvaluatePassedAndIsolatedPawns(whitePawns, blackPawns, true);
         int blackPawnScore = EvaluatePassedAndIsolatedPawns(blackPawns, whitePawns, false);
         evaluation += whitePawnScore - blackPawnScore;
-        
-        // Doubled pawns
-        int whiteDoubledPawnsScore = EvaluateDoubledPawns(whitePawns);
-        int blackDoubledPawnsScore = EvaluateDoubledPawns(blackPawns);
-        evaluation += whiteDoubledPawnsScore - blackDoubledPawnsScore;
-
-        // Apply with opening weight (important early, less important in endgame)
-        evaluation += (int)((whiteCenterControl - blackCenterControl) * openingWeight);
         
         // Mop-up evaluation for endgame
         evaluation += EvaluateMopUp(whiteKingSquare, blackKingSquare, evaluation, endGameWeight);
@@ -187,21 +181,6 @@ public static class Evaluation
         evaluation += isolatedPawnPenaltyByCount[numIsolatedPawns];
         
         return evaluation;
-    }
-
-    private static int EvaluateDoubledPawns(ulong pawns)
-    {
-        int doubledFiles = 0;
-    
-        foreach (ulong file in files)
-        {
-            int pawnsOnFile = BitboardHelper.GetNumberOfSetBits(pawns & file);
-            if (pawnsOnFile > 1) {
-                doubledFiles++;
-            }
-        }
-    
-        return doubledPawnPenaltyByCount[doubledFiles];
     }
     
     // There's some funky math in here
