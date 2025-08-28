@@ -1,24 +1,28 @@
 using ChessChallenge.API;
 using System;
+using System.Diagnostics.CodeAnalysis;
 
 public class MoveOrdering
 {
+    public const int maxKillerMovePly = 32;
+    
     int[] moveScores;
     
     const int million = 1000000;
     const int hashMoveScore = 100 * million;
     const int winningCaptureBias = 8 * million;
     const int promoteBias = 6 * million;
-    const int killerBias = 4 * million; // To be implemented
+    const int killerBias = 4 * million;
     const int losingCaptureBias = 2 * million;
-    const int regularBias = 0; // To be implemented
+    
+    readonly Killers[] killerMoves = new Killers[maxKillerMovePly];
 
     public MoveOrdering()
     {
         moveScores = new int[218];
     }
     
-    public void OrderMoves(Board board, ref Span<Move> moves, Move hashMove = default)
+    public void OrderMoves(Board board, ref Span<Move> moves, bool inQSearch, int ply = 0, Move hashMove = default)
     {
         ulong oppAttacks = board.GetOpponentAttackMap();
         
@@ -85,12 +89,30 @@ public class MoveOrdering
             {
                 score += 70;
             }
+
+            if (!isCapture && !move.IsPromotion)
+            {
+                // Killer moves
+                if (!inQSearch && ply < maxKillerMovePly && killerMoves[ply].Match(move))
+                {
+                    score += killerBias;
+                }
+            }
             
-            // Add original array index as tie-breaker
             moveScores[i] = score;
         }
         
         Quicksort(moves, moveScores, 0, moves.Length - 1);
+    }
+    
+    public void ResetKillers()
+    {
+        for (int i = 0; i < killerMoves.Length; i++) killerMoves[i].Clear();
+    }
+
+    public void AddKiller(int ply, Move move)
+    {
+        if ((uint)ply < (uint)killerMoves.Length) killerMoves[ply].Add(move);
     }
 
     int GetPieceValue(PieceType pieceType)
@@ -127,4 +149,24 @@ public class MoveOrdering
 
         return i + 1;
     }
+}
+
+public struct Killers
+{
+    public Move moveA;
+    public Move moveB;
+
+    public void Add(Move m)
+    {
+        // Keep most-recent in A. Skip if it's already A.
+        if (!m.Equals(moveA))
+        {
+            moveB = moveA;
+            moveA = m;
+        }
+    }
+
+    public bool Match(Move m) => m.Equals(moveA) || m.Equals(moveB);
+
+    public void Clear() { moveA = Move.NullMove; moveB = Move.NullMove; }
 }

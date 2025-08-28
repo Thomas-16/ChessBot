@@ -63,6 +63,8 @@ public class MainBot : IChessBot
         if (moveOrdering == null)
             moveOrdering = new MoveOrdering();
         
+        moveOrdering.ResetKillers();
+        
         // Set time limit based on timer mode
         if (useMoveTime) {
             // hardTimeLimit is already set correctly for movetime mode
@@ -192,7 +194,7 @@ public class MainBot : IChessBot
         useTimer = true;
     }
     
-    int Search(Board board, int depth, int alpha, int beta, bool isRoot, int numExtensions = 0)
+    int Search(Board board, int depth, int alpha, int beta, bool isRoot, int numExtensions = 0, int ply = 0)
     {
         // Check time limit periodically (not every node to avoid overhead)
         if (positionsEvaluated % 1000 == 0)
@@ -243,7 +245,7 @@ public class MainBot : IChessBot
         
         Span<Move> movesSpan = stackalloc Move[218];
         board.GetLegalMovesNonAlloc(ref movesSpan);
-        moveOrdering.OrderMoves(board, ref movesSpan, ttMove);
+        moveOrdering.OrderMoves(board, ref movesSpan, false, ply, ttMove);
         
         Move bestMoveThisPosition = Move.NullMove;
         int bestScore = int.MinValue;
@@ -269,7 +271,7 @@ public class MainBot : IChessBot
                 }
             }
             
-            int score = -Search(board, depth - 1 + extension, -beta, -alpha, false, numExtensions + extension);
+            int score = -Search(board, depth - 1 + extension, -beta, -alpha, false, numExtensions + extension, ply + 1);
             board.UndoMove(move);
             
             if (searchCanceledImmediately)
@@ -281,9 +283,21 @@ public class MainBot : IChessBot
                 bestMoveThisPosition = move;
             }
             
-            alpha = Math.Max(alpha, score);
-            if (beta <= alpha)
-                break;
+            if (score >= beta) // fail-high cutoff
+            {
+                // Record as killer move
+                if (!isRoot && move.CapturePieceType == PieceType.None && !move.IsPromotion)
+                    moveOrdering.AddKiller(ply, move);
+
+                // Store as LOWER bound at this node
+                transpositionTable.StoreEntry(zobristKey, beta, depth, NodeType.LowerBound, move);
+                return beta; // fail-hard
+            }
+
+            if (score > alpha)
+            {
+                alpha = score;
+            }
         }
         
         // Only store in TT if search wasn't interrupted
@@ -335,7 +349,7 @@ public class MainBot : IChessBot
         
         Span<Move> capturesSpan = stackalloc Move[218];
         board.GetLegalMovesNonAlloc(ref capturesSpan, true);
-        moveOrdering.OrderMoves(board, ref capturesSpan);
+        moveOrdering.OrderMoves(board, ref capturesSpan, true);
         
         foreach (Move capture in capturesSpan)
         {
