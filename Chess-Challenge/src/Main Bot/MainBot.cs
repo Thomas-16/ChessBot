@@ -290,7 +290,7 @@ public class MainBot : IChessBot
                     moveOrdering.AddKiller(ply, move);
 
                 // Store as LOWER bound at this node
-                transpositionTable.StoreEntry(zobristKey, beta, depth, NodeType.LowerBound, move);
+                transpositionTable.StoreEntry(zobristKey, beta, depth, NodeType.LowerBound, bestMoveThisPosition);
                 return beta; // fail-hard
             }
 
