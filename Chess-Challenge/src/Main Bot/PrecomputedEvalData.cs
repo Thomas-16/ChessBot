@@ -1,5 +1,6 @@
 ﻿using ChessChallenge.API;
 using System;
+using System.Collections.Generic;
 
 public static class PrecomputedEvalData
 {
@@ -151,4 +152,49 @@ public static class PrecomputedEvalData
         11574427654092267680,
         4629771061636907072,
     };
+    
+    public static readonly int[][] PawnShieldSquaresWhite;
+    public static readonly int[][] PawnShieldSquaresBlack;
+
+    static PrecomputedEvalData()
+    {
+        PawnShieldSquaresWhite = new int[64][];
+        PawnShieldSquaresBlack = new int[64][];
+        for (int squareIndex = 0; squareIndex < 64; squareIndex++)
+        {
+            CreatePawnShieldSquare(squareIndex);
+        }
+    }
+
+    static void CreatePawnShieldSquare(int squareIndex)
+    {
+        List<int> shieldIndicesWhite = new();
+        List<int> shieldIndicesBlack = new();
+        Square coord = new Square(squareIndex);
+        int rank = coord.Rank;
+        int file = Math.Clamp(coord.File, 1, 6);
+
+        for (int fileOffset = -1; fileOffset <= 1; fileOffset++)
+        {
+            AddIfValid(new Square(file + fileOffset, rank + 1), shieldIndicesWhite);
+            AddIfValid(new Square(file + fileOffset, rank - 1), shieldIndicesBlack);
+        }
+
+        for (int fileOffset = -1; fileOffset <= 1; fileOffset++)
+        {
+            AddIfValid(new Square(file + fileOffset, rank + 2), shieldIndicesWhite);
+            AddIfValid(new Square(file + fileOffset, rank - 2), shieldIndicesBlack);
+        }
+
+        PawnShieldSquaresWhite[squareIndex] = shieldIndicesWhite.ToArray();
+        PawnShieldSquaresBlack[squareIndex] = shieldIndicesBlack.ToArray();
+
+        void AddIfValid(Square square, List<int> list)
+        {
+            if (square.File >= 0 && square.File < 8 && square.Rank >= 0 && square.Rank < 8)
+            {
+                list.Add(square.Index);
+            }
+        }
+    }
 }

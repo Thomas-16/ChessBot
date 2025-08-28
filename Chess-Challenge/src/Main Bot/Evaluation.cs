@@ -32,8 +32,20 @@ public static class Evaluation
                           | ((ulong)1 << new Square("d6").Index)
                           | ((ulong)1 << new Square("e6").Index);
     
+    static ulong[] fileMasks = {
+        0x0101010101010101, // File A
+        0x0202020202020202, // File B
+        0x0404040404040404, // File C
+        0x0808080808080808, // File D
+        0x1010101010101010, // File E
+        0x2020202020202020, // File F
+        0x4040404040404040, // File G
+        0x8080808080808080  // File H
+    };
+    
     static readonly int[] passedPawnBonuses = { 0, 120, 80, 50, 30, 15, 15 }; // bonus given to a passed pawn based on how close it is to promoting
     static readonly int[] isolatedPawnPenaltyByCount = { 0, -10, -25, -50, -75, -75, -75, -75, -75 };
+    static readonly int[] kingPawnShieldScores = { 4, 7, 4, 3, 6, 3 };
 
     public static int Evaluate(Board board)
     {
@@ -97,12 +109,8 @@ public static class Evaluation
         Square whiteKingSquare = board.GetKingSquare(true);
         Square blackKingSquare = board.GetKingSquare(false);
         
-        int whiteKingSquareIndex = GetSquareIndex(whiteKingSquare, true);
-        int blackKingSquareIndex = GetSquareIndex(blackKingSquare, false);
-        
-        int whiteKingValue = GetPieceSquareValue(PieceType.King, whiteKingSquareIndex, openingWeight, endGameWeight);
-        int blackKingValue = GetPieceSquareValue(PieceType.King, blackKingSquareIndex, openingWeight, endGameWeight);
-        
+        int whiteKingValue = GetPieceSquareValue(PieceType.King, GetSquareIndex(whiteKingSquare, true), openingWeight, endGameWeight);
+        int blackKingValue = GetPieceSquareValue(PieceType.King, GetSquareIndex(blackKingSquare, false), openingWeight, endGameWeight);
         evaluation += whiteKingValue - blackKingValue;
 
         ulong whitePiecesWithoutKing = board.WhitePiecesBitboard & ~board.GetPieceBitboard(PieceType.King, true);
@@ -123,6 +131,15 @@ public static class Evaluation
         int whitePawnScore = EvaluatePassedAndIsolatedPawns(whitePawns, blackPawns, true);
         int blackPawnScore = EvaluatePassedAndIsolatedPawns(blackPawns, whitePawns, false);
         evaluation += whitePawnScore - blackPawnScore;
+        
+        // King safety
+        int whiteNumRooks = BitboardHelper.GetNumberOfSetBits(whiteRooks);
+        int whiteNumQueens = BitboardHelper.GetNumberOfSetBits(whiteQueens);
+        int blackNumRooks = BitboardHelper.GetNumberOfSetBits(blackRooks);
+        int blackNumQueens = BitboardHelper.GetNumberOfSetBits(blackQueens);
+        int whiteKingSafetyEval = EvaluateKingSafety(true, whiteKingSquare.Index, whitePawns, blackPawns, blackPieceSquareTableEval, blackNumRooks, blackNumQueens, openingWeight);
+        int blackKingSafetyEval = EvaluateKingSafety(false, blackKingSquare.Index, blackPawns, whitePawns, whitePieceSquareTableEval, whiteNumRooks, whiteNumQueens, openingWeight);
+        evaluation += whiteKingSafetyEval - blackKingSafetyEval;
         
         // Mop-up evaluation for endgame
         evaluation += EvaluateMopUp(whiteKingSquare, blackKingSquare, evaluation, endGameWeight);
@@ -185,6 +202,87 @@ public static class Evaluation
         evaluation += isolatedPawnPenaltyByCount[numIsolatedPawns];
         
         return evaluation;
+    }
+
+    private static int EvaluateKingSafety(bool isWhite, int kingSquare, ulong ownPawns, ulong enemyPawns, int enemyPieceSquareScore, int enemyNumRooks, int enemyNumQueens, float openingWeight)
+    {
+        int kingFile = kingSquare % 8;
+        
+        int penalty = 0;
+        int uncastledKingPenalty = 0;
+        
+        // King is likely castled
+        if (kingFile <= 2 || kingFile >= 5)
+        {
+            int[] pawnShieldSquares = isWhite ? PrecomputedEvalData.PawnShieldSquaresWhite[kingSquare] : PrecomputedEvalData.PawnShieldSquaresBlack[kingSquare];
+            
+            // Check the immediate shield pawns - 1 rank ahead
+            for (int i = 0; i < pawnShieldSquares.Length / 2; i++)
+            {
+                int shieldSquareIndex = pawnShieldSquares[i];
+                if (!BitBoardContainsSquare(ownPawns, shieldSquareIndex))
+                {
+                    // The immediate shield pawn is missing but a pawn exists 1 rank forward
+                    if (pawnShieldSquares.Length > 3 && BitBoardContainsSquare(ownPawns, pawnShieldSquares[i + 3]))
+                    {
+                        // Apply a reduced penalty
+                        penalty += kingPawnShieldScores[i + 3];
+                    }
+                    // The immediate pawn is missing and there's no pawn 1 rank forward either
+                    else
+                    {
+                        penalty += kingPawnShieldScores[i];
+                    }
+                }
+            }
+            penalty *= penalty; // square the penalty
+        }
+        // King is likely not castled
+        else
+        {
+            // Scales penalty from 0-50 based on how developed the opponent's pieces are
+            // Logic: an uncastled king is more vulnerable when the opponent has active pieces
+            float enemyDevelopmentScore = Math.Clamp((enemyPieceSquareScore + 10) / 130f, 0, 1);
+            uncastledKingPenalty = (int) (50 * enemyDevelopmentScore);
+        }
+        
+        // Evaluate open file attacks
+        int openFileAgainstKingPenalty = 0;
+        
+        // If enemy has 2+ rooks or rook+queen combo
+        if (enemyNumRooks > 1 || (enemyNumRooks > 0 && enemyNumQueens > 0))
+        {
+            int clampedKingFile = Math.Clamp(kingFile, 1, 6);
+            
+            // Check open files near the king:
+            for (int attackFile = clampedKingFile - 1; attackFile <= clampedKingFile + 1; attackFile++)
+            {
+                ulong fileMask = fileMasks[attackFile];
+                bool isKingFile = attackFile == kingFile;
+                
+                // Semi-open file - no enemy pawns
+                if ((enemyPawns & fileMask) == 0)
+                {
+                    openFileAgainstKingPenalty += isKingFile ? 25 : 15;
+                    
+                    // Fully open file - no pawns at all
+                    if ((ownPawns & fileMask) == 0)
+                    {
+                        openFileAgainstKingPenalty += isKingFile ? 15 : 10;
+                    }
+                }
+
+            }
+        }
+
+        float enemyQueenMultiplier = 1f;
+        // If enemy queen is off the board, penalty is reduced to 67%
+        if (enemyNumQueens == 0)
+        {
+            enemyQueenMultiplier *= 0.67f; // SIX SEVEN - not tuned just funny number
+        }
+
+        return (int)((-penalty - uncastledKingPenalty - openFileAgainstKingPenalty) * openingWeight * enemyQueenMultiplier);
     }
     
     public static float CalculateGamePhase(Board board)
@@ -329,5 +427,10 @@ public static class Evaluation
     private static int FileIndex(int squareIndex)
     {
         return squareIndex & 0b000111;
+    }
+
+    private static bool BitBoardContainsSquare(ulong bitboard, int squareIndex)
+    {
+        return (bitboard & (1UL << squareIndex)) != 0;
     }
 }
