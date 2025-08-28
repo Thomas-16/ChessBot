@@ -15,11 +15,14 @@ public class MoveOrdering
     const int killerBias = 4 * million;
     const int losingCaptureBias = 2 * million;
     
-    readonly Killers[] killerMoves = new Killers[maxKillerMovePly];
+    Killers[] killerMoves;
+    public int[,,] history;
 
     public MoveOrdering()
     {
         moveScores = new int[218];
+        killerMoves = new Killers[maxKillerMovePly];
+        history = new int[2, 64, 64];
     }
     
     public void OrderMoves(Board board, ref Span<Move> moves, bool inQSearch, int ply = 0, Move hashMove = default)
@@ -97,6 +100,10 @@ public class MoveOrdering
                 {
                     score += killerBias;
                 }
+                
+                // History heuristic
+                int colorIndex = board.IsWhiteToMove ? 0 : 1;
+                score += history[colorIndex, startSquare.Index, targetSquare.Index];
             }
             
             moveScores[i] = score;
@@ -113,6 +120,11 @@ public class MoveOrdering
     public void AddKiller(int ply, Move move)
     {
         if ((uint)ply < (uint)killerMoves.Length) killerMoves[ply].Add(move);
+    }
+
+    public void ResetHistory()
+    {
+        history = new int[2, 64, 64];
     }
 
     int GetPieceValue(PieceType pieceType)

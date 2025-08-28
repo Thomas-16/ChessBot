@@ -64,6 +64,7 @@ public class MainBot : IChessBot
             moveOrdering = new MoveOrdering();
         
         moveOrdering.ResetKillers();
+        moveOrdering.ResetHistory();
         
         // Set time limit based on timer mode
         if (useMoveTime) {
@@ -285,9 +286,17 @@ public class MainBot : IChessBot
             
             if (score >= beta) // fail-high cutoff
             {
-                // Record as killer move
-                if (!isRoot && move.CapturePieceType == PieceType.None && !move.IsPromotion)
-                    moveOrdering.AddKiller(ply, move);
+                if (move.CapturePieceType == PieceType.None && !move.IsPromotion)
+                {
+                    // Record as killer move
+                    if (!isRoot)
+                        moveOrdering.AddKiller(ply, move);
+                
+                    // Update history heuristic
+                    int historyScore = depth * depth;
+                    int colorIndex = board.IsWhiteToMove ? 0 : 1;
+                    moveOrdering.history[colorIndex, move.StartSquare.Index, move.TargetSquare.Index] += historyScore;
+                }
 
                 // Store as LOWER bound at this node
                 transpositionTable.StoreEntry(zobristKey, beta, depth, NodeType.LowerBound, bestMoveThisPosition);
