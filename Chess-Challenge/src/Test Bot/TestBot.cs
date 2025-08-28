@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Numerics;
+using static System.Math;
 
 namespace ChessChallenge.Example
 {
@@ -11,25 +13,47 @@ namespace ChessChallenge.Example
     // Plays randomly otherwise.
     public class TestBot : IChessBot
     {
-        private static int[] pieceValues = { 0, 100, 320, 330, 500, 900, 20000 };
-        private const int MAX_KILLER_MOVES = 3;
+        const bool useTimer = false;
+        const int maxTimePerMove = 200;
+        const bool printDebug = false;
+        const bool bookMoves = true;
+        const bool determinedFirstTwoMoves = false;
+        const bool useMaxThinkTime = true;
+        const int maxThinkTimeMs = 5000;
 
-        private int MaxDepth = 0; // Adjust as necessary
-        //private TranspositionTable transpositionTable = new TranspositionTable();
-        private List<Move> killerMoves = new List<Move>(MAX_KILLER_MOVES);
-        public Dictionary<ulong, TranspositionTableEntry> transpositionTable = new Dictionary<ulong, TranspositionTableEntry>();
+        static readonly int[] pieceValues = { 0, 100, 320, 330, 500, 900, 20000 };
+        static readonly float[] capturePieceValues = { 0, 100f, 320f, 330f, 525f, 1000f, 3200f };
+        static readonly PieceType[] pieceTypes = { PieceType.None, PieceType.Pawn, PieceType.Knight, PieceType.Bishop, PieceType.Rook, PieceType.Queen, PieceType.King };
+        static readonly ulong whiteTerritoryMask = 0x00000000FFFFFFFF; // The bottom 4 ranks (1-4)
+        static readonly ulong blackTerritoryMask = 0xFFFFFFFF00000000; // The top 4 ranks (5-8)
+        static readonly ulong notAFile = 0xFEFEFEFEFEFEFEFE;
+        static readonly ulong notHFile = 0x7F7F7F7F7F7F7F7F;
+        static readonly int[] passedPawnBonuses = { 0, 600, 400, 250, 150, 75, 75 };
+        static readonly int[] isolatedPawnPenaltyByCount = { 0, -50, -125, -250, -375, -375, -375, -375, -375 };
+        static readonly int[] doubledPawnPenaltyByCount = { 0, -60, -140, -269, -375, -375, -375, -375, -375 };
 
+        // Move Ordering constants
+        const int million = 1000000;
+        const int hashMoveScore = 100 * million;
+        const int winningCaptureBias = 8 * million;
+        const int promoteBias = 6 * million;
+        const int killerBias = 4 * million;
+        const int losingCaptureBias = 2 * million;
 
-        private static readonly string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "Book.txt");
-        private OpeningBook openingBook = new OpeningBook(File.ReadAllText(path));
-        private bool isWhite;
-        private string lastSearchedPos;
-        private int positionsSearched = 0;
+        Entry[] _transpositions = new Entry[16777216];
+        static int transCount;
+        float _budgetCounter = 121, budget;
+        bool searchCancelled;
+        Timer timer;
+        Board board;
+        HashSet<Move> _killerMoves = new();
+        int[,,] _history = new int[2, 64, 64];
 
-
+        static readonly string openingBookPath = Path.Combine(ChessChallenge.Application.FileHelper.GetResourcePath(), "Book.txt");
+        OpeningBook openingBook = new(File.ReadAllText(openingBookPath));
 
         // Square values can be calculated by bit shifting
-        private ulong centerSquares = ((ulong)1 << new Square("e4").Index)
+        ulong centerSquares = ((ulong)1 << new Square("e4").Index)
                             | ((ulong)1 << new Square("d4").Index)
                             | ((ulong)1 << new Square("e5").Index)
                             | ((ulong)1 << new Square("d5").Index)
@@ -45,165 +69,57 @@ namespace ChessChallenge.Example
                             | ((ulong)1 << new Square("e3").Index)
                             | ((ulong)1 << new Square("d6").Index)
                             | ((ulong)1 << new Square("e6").Index);
-
-
-        #region Piece-Square Tables
-        private static readonly int[] PawnTable = new int[64] {
-            0,  0,  0,  0,  0,  0,  0,  0,
-            50, 50, 50, 50, 50, 50, 50, 50,
-            10, 10, 20, 30, 30, 20, 10, 10,
-             5,  5, 10, 25, 25, 10,  5,  5,
-             0,  0,  0, 40, 40,  0,  0,  0,
-             5, -5, 15,  0,  0, 15, -5,  5,
-             5, 10, 10,-20,-20, 10, 10,  5,
-             0,  0,  0,  0,  0,  0,  0,  0
+        Square[] whiteCastledKingSquares = {
+            new Square("a1"),
+            new Square("b1"),
+            new Square("c1"),
+            new Square("g1"),
+            new Square("h1")
         };
-        private static readonly int[] PawnEndGameTable = new int[64] {
-            0,  0,  0,  0,  0,  0,  0,  0,
-            90, 90, 90, 90, 90, 90, 90, 90,
-             60, 60, 60, 60, 60, 60, 60, 60,
-             40, 40, 40, 40, 40, 40, 40, 40,
-             20, 20, 20, 20, 20, 20, 20, 20,
-             10, 10, 10, 10, 10, 10, 10, 10,
-             10, 10, 10, 10, 10, 10, 10, 10,
-             0,  0,  0,  0,  0,  0,  0,  0
+        Square[] blackCastledKingSquares = {
+            new Square("a8"),
+            new Square("b8"),
+            new Square("c8"),
+            new Square("g8"),
+            new Square("h8")
         };
-        private static readonly int[] KnightTable = new int[64] {
-            -50,-40,-30,-30,-30,-30,-40,-50,
-            -40,-20,  0,  0,  0,  0,-20,-40,
-            -30,  0, 10, 15, 15, 10,  0,-30,
-            -30,  5, 15, 20, 20, 15,  5,-30,
-            -30,  0, 15, 20, 20, 15,  0,-30,
-            -30,  5, 30, 15, 15, 30,  5,-30,
-            -40,-20,  0,  5,  5,  0,-20,-40,
-            -50,-40,-30,-30,-30,-30,-40,-50,
+        //ulong whiteKingMobilitySquares =
+        //                      ((ulong)1 << new Square("a1").Index)
+        //                    | ((ulong)1 << new Square("b1").Index)
+        //                    | ((ulong)1 << new Square("c1").Index)
+        //                    | ((ulong)1 << new Square("a2").Index)
+        //                    | ((ulong)1 << new Square("b2").Index)
+        //                    | ((ulong)1 << new Square("c2").Index)
+        //                    | ((ulong)1 << new Square("f1").Index)
+        //                    | ((ulong)1 << new Square("g1").Index)
+        //                    | ((ulong)1 << new Square("h1").Index)
+        //                    | ((ulong)1 << new Square("g2").Index)
+        //                    | ((ulong)1 << new Square("h2").Index);
+        
+        //ulong blackKingMobilitySquares =
+        //                      ((ulong)1 << new Square("a8").Index)
+        //                    | ((ulong)1 << new Square("b8").Index)
+        //                    | ((ulong)1 << new Square("c8").Index)
+        //                    | ((ulong)1 << new Square("a7").Index)
+        //                    | ((ulong)1 << new Square("b7").Index)
+        //                    | ((ulong)1 << new Square("c7").Index)
+        //                    | ((ulong)1 << new Square("f8").Index)
+        //                    | ((ulong)1 << new Square("g8").Index)
+        //                    | ((ulong)1 << new Square("h8").Index)
+        //                    | ((ulong)1 << new Square("g7").Index)
+        //                    | ((ulong)1 << new Square("h7").Index);
+
+        // Masks for each file on the chessboard
+        static ulong[] files = {
+            0x0101010101010101, // File A
+            0x0202020202020202, // File B
+            0x0404040404040404, // File C
+            0x0808080808080808, // File D
+            0x1010101010101010, // File E
+            0x2020202020202020, // File F
+            0x4040404040404040, // File G
+            0x8080808080808080  // File H
         };
-
-        private static readonly int[] BishopTable = new int[64] {
-            -20,-10,-10,-10,-10,-10,-10,-20,
-            -10,  0,  0,  0,  0,  0,  0,-10,
-            -10,  0,  5, 10, 10,  5,  0,-10,
-            -10,  5,  5, 10, 10,  5,  5,-10,
-            -10,  0, 10, 10, 10, 10,  0,-10,
-            -10, 10, 10, 10, 10, 10, 10,-10,
-            -10,  5,  0,  0,  0,  0,  5,-10,
-            -20,-10,-10,-10,-10,-10,-10,-20,
-        };
-
-        private static readonly int[] RookTable = new int[64] {
-            0,  0,  0,  0,  0,  0,  0,  0,
-              5, 10, 10, 10, 10, 10, 10,  5,
-             -5,  0,  0,  0,  0,  0,  0, -5,
-             -5,  0,  0,  0,  0,  0,  0, -5,
-             -5,  0,  0,  0,  0,  0,  0, -5,
-             -5,  0,  0,  0,  0,  0,  0, -5,
-             -5,  0,  0,  0,  0,  0,  0, -5,
-              0,  0,  0,  5,  5,  0,  0,  0
-        };
-
-        private static readonly int[] QueenTable = new int[64] {
-            -20,-10,-10, -5, -5,-10,-10,-20,
-            -10,  0,  0,  0,  0,  0,  0,-10,
-            -10,  0,  5,  5,  5,  5,  0,-10,
-             -5,  0,  5,  5,  5,  5,  0, -5,
-              0,  0,  5,  5,  5,  5,  0, -5,
-            -10,  5,  5,  5,  5,  5,  0,-10,
-            -10,  0,  5,  0,  0,  0,  0,-10,
-            -20,-10,-10,  0, -5,-10,-10,-20
-        };
-
-        private static readonly int[] KingMiddleGameTable = new int[64] {
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -20,-30,-30,-40,-40,-30,-30,-20,
-            -10,-20,-20,-20,-20,-20,-20,-10,
-             20, 20,  0,  0,  0,  0, 20, 20,
-             20, 30, 20,-10,  0, 10, 30, 20
-        };
-        private static readonly int[] KingEndGameTable = new int[64] {
-            -50,-40,-30,-20,-20,-30,-40,-50,
-            -30,-20,-10,  0,  0,-10,-20,-30,
-            -30,-10, 20, 30, 30, 20,-10,-30,
-            -30,-10, 30, 40, 40, 30,-10,-30,
-            -30,-10, 30, 40, 40, 30,-10,-30,
-            -30,-10, 20, 30, 30, 20,-10,-30,
-            -30,-30,  0,  0,  0,  0,-30,-30,
-            -50,-30,-30,-30,-30,-30,-30,-50
-        };
-        private static readonly int[] KingEndEndGameTable = new int[64] {
-            -50,-50,-50,-50,-50,-50,-50,-50,
-            -50,-30,-30,-30,-30,-30,-30,-50,
-            -50,-30,  0,  0,  0,  0,-30,-50,
-            -50,-30,  0, 10, 10,  0,-30,-50,
-            -50,-30,  0, 10, 10,  0,-30,-50,
-            -50,-30,  0,  0,  0,  0,-30,-50,
-            -50,-30,-30,-30,-30,-30,-30,-50,
-            -50,-50,-50,-50,-50,-50,-50,-50
-        };
-        #endregion
-
-        //public enum ScoreType { Exact, Alpha, Beta }
-        public struct TranspositionTableEntry
-        {
-            public int Depth;
-            public int Score;
-            public Move BestMove;
-            public int Flag; // 0 = exact, 1 = lower bound, 2 = upper bound
-        }
-
-
-        //public class TranspositionTable
-        //{
-        //    private const int TableSize = 1 << 24; // Adjust based on memory constraints
-        //    private readonly CacheItem[] table;
-        //    private int entries = 0;
-
-        //    public TranspositionTable() {
-        //        table = new CacheItem[TableSize];
-        //    }
-
-        //    private struct CacheItem
-        //    {
-        //        public ulong Key;
-        //        public int Score;
-        //        public Move BestMove;
-        //        public int Depth;
-        //        public ScoreType ScoreType;
-        //    }
-
-        //    public void Add(ulong boardHash, int score, Move bestMove, int depth, ScoreType scoreType) {
-        //        int index = (int)(boardHash % TableSize);
-        //        CacheItem cacheItem = new()
-        //        {
-        //            Key = boardHash,
-        //            Score = score,
-        //            BestMove = bestMove,
-        //            Depth = depth,
-        //            ScoreType = scoreType
-        //        };
-        //        table[index] = cacheItem; // Overwrite the existing entry if any
-        //        entries++;
-        //    }
-
-        //    public (int? score, Move bestMove, int? depth, ScoreType? scoreType) Get(ulong boardHash) {
-        //        int index = (int)(boardHash % TableSize);
-        //        CacheItem cacheItem = table[index];
-        //        if (cacheItem.Key == boardHash) {
-        //            return (cacheItem.Score, cacheItem.BestMove, cacheItem.Depth, cacheItem.ScoreType);
-        //        }
-        //        return (null, Move.NullMove, null, null);
-        //    }
-
-        //    public void Clear() {
-        //        Array.Clear(table, 0, table.Length);
-        //        entries = 0;
-        //    }
-
-        //    public int Count() => entries;
-        //}
-
         public class OpeningBook
         {
             readonly Dictionary<string, BookMove[]> movesByPosition;
@@ -257,8 +173,10 @@ namespace ChessChallenge.Example
                     for (int i = 0; i < weights.Length; i++) {
                         double prob = weights[i] / weightSum;
                         probCumul[i] = probCumul[Math.Max(0, i - 1)] + prob;
-                        //string debugString = $"{moves[i].moveString}: {prob * 100:0.00}% (cumul = {probCumul[i]})";
-                        //Console.WriteLine(debugString);
+                        string debugString = $"{moves[i].moveString}: {prob * 100:0.00}% (cumul = {probCumul[i]})";
+                        if (printDebug) {
+                            Console.WriteLine(debugString);
+                        }
                     }
 
 
@@ -295,507 +213,60 @@ namespace ChessChallenge.Example
                 }
             }
         }
+        public static string GetTranspositionPercentage() {
+            return $"{Math.Round(transCount / 16777216.0 * 100.0, 2)}%";
+        }
+        public void ResetTrans() {
+            transCount = 0;
+            //_transpositions = new Entry[16777216];
+        }
+        float OneMinusEndgameT(Board board, bool white) {
+            int endgameWeightSum = 0;
+            foreach (var pl in board.GetAllPieceLists())
+                if (pl.IsWhitePieceList == white)
+                    endgameWeightSum += (0x942200 >> 4 * (int)pl.TypeOfPieceInList & 0xf) * pl.Count;
 
-        //public Move Think(Board board, Timer timer) {
-        //    this.isWhite = board.IsWhiteToMove;
+            return Min(1, endgameWeightSum * 0.04f);
+        }
+        int EvaluateBoard() {
+            float ownOneMinusEndgameT = OneMinusEndgameT(board, false);
+            float otherOneMinusEndgameT = OneMinusEndgameT(board, true);
+            float score = 0.0f;
+            float whiteMatScore = 0f;
+            float blackMatScore = 0f;
 
-        //    if (board.PlyCount == 0) {
+            //foreach (var pl in board.GetAllPieceLists())
+            //    score += 0b1000010 >> (int)pl.TypeOfPieceInList != 0
+            //        ? (pl.IsWhitePieceList ? ownOneMinusEndgameT : -otherOneMinusEndgameT) * EvaluatePieceSquareTable(Starts, pl)
+            //          + (pl.IsWhitePieceList ? 1.0f - ownOneMinusEndgameT : otherOneMinusEndgameT - 1.0f) * EvaluatePieceSquareTable(Ends, pl)
+            //        : EvaluatePieceSquareTable(Starts, pl);
 
-        //        Move dMove = new Move("d2d4", board);
-        //        Move eMove = new Move("e2e4", board);
+            foreach (PieceList pl in board.GetAllPieceLists()) {
+                float pieceListScore;
 
-        //        Random rand = new Random();
+                if (0b1000010 >> (int)pl.TypeOfPieceInList != 0) {
+                    float pieceScoreStart = EvaluatePieceSquareTable(Starts, pl);
+                    float pieceScoreEnd = EvaluatePieceSquareTable(Ends, pl);
 
-        //        Move selectedMove;
-
-        //        if (rand.Next(2) == 0)  // Randomly generates 0 or 1
-        //        {
-        //            selectedMove = dMove;
-        //        }
-        //        else {
-        //            selectedMove = eMove;
-        //        }
-
-        //        return selectedMove;
-        //    }
-
-        //    if (openingBook.TryGetBookMove(board, out string moveString, 0.4)) {
-        //        Console.WriteLine($"Book: {moveString}");
-        //        return new Move(moveString, board);
-        //    }
-
-        //    if (board.PlyCount == 1) {
-        //        // If the bot is playing black and the opponent played "d4" or "e4", mirror their move
-        //        Move lastMove = board.GameMoveHistory[^1]; // Gets the last move
-        //        Move nextMove;
-        //        Random rand = new Random();
-
-        //        if (lastMove.ToString() == "d2d4") {
-        //            return new Move("d7d5", board);
-        //        }
-        //        else if (lastMove.ToString() == "e2e4") {
-        //            if (rand.Next(3) == 0)  // Randomly generates 0 or 1
-        //            {
-        //                nextMove = new Move("e7e5", board);
-        //            }
-        //            else {
-        //                nextMove = new Move("c7c5", board);
-        //            }
-        //            return nextMove;
-        //        }
-        //    }
-
-
-        //    Move bestMove = IterativeDeepening(board, timer);
-
-        //    return bestMove;
-        //}
-        public Move Think(Board board, Timer timer) {
-            //Console.WriteLine(EvaluateBoard(board));
-            if (board.PlyCount == 0) {
-
-                Move dMove = new Move("d2d4", board);
-                Move eMove = new Move("e2e4", board);
-
-                Random rand = new Random();
-
-                Move selectedMove;
-
-                if (rand.Next(2) == 0)  // Randomly generates 0 or 1
-                {
-                    selectedMove = dMove;
+                    if (pl.IsWhitePieceList) {
+                        pieceListScore = ownOneMinusEndgameT * pieceScoreStart + (1.0f - ownOneMinusEndgameT) * pieceScoreEnd;
+                    }
+                    else {
+                        pieceListScore = -otherOneMinusEndgameT * pieceScoreStart + (otherOneMinusEndgameT - 1.0f) * pieceScoreEnd;
+                    }
                 }
                 else {
-                    selectedMove = eMove;
+                    pieceListScore = EvaluatePieceSquareTable(Starts, pl);
                 }
 
-                return selectedMove;
-            }
-
-            if (openingBook.TryGetBookMove(board, out string moveString, 0.4)) {
-                // Console.WriteLine($"Book: {moveString}");
-                return new Move(moveString, board);
-            }
-
-            if (board.PlyCount == 1) {
-                // If the bot is playing black and the opponent played "d4" or "e4", mirror their move
-                Move lastMove = board.GameMoveHistory[^1]; // Gets the last move
-                Move nextMove;
-                Random rand = new Random();
-
-                if (lastMove.ToString() == "d2d4") {
-                    return new Move("d7d5", board);
+                if (pl.IsWhitePieceList) {
+                    whiteMatScore += pieceListScore;
                 }
-                else if (lastMove.ToString() == "e2e4") {
-                    if (rand.Next(3) == 0)  // Randomly generates 0 or 1
-                    {
-                        nextMove = new Move("e7e5", board);
-                    }
-                    else {
-                        nextMove = new Move("c7c5", board);
-                    }
-                    return nextMove;
+                else {
+                    blackMatScore += pieceListScore;
                 }
+                score += pieceListScore;
             }
-            int totalPieces = CountPiecesOnBoard(board);
-
-            bool isOpening = totalPieces > 29;
-            bool isMidgame = totalPieces <= 29 && totalPieces > 15;
-            bool isEndgame = totalPieces <= 15;
-            bool isEndEndgame = totalPieces <= 5;
-
-            int depthMaxTime = 1000;
-
-            if (isOpening) {
-                MaxDepth = 10;
-            }
-            else if (isMidgame) {
-                MaxDepth = 12;
-            }
-            else if (isEndgame) {
-                MaxDepth = 26;
-            }
-            else if (isEndEndgame) {
-                MaxDepth = 28;
-            }
-
-            MaxDepth = 5; // You can set this to the desired maximum depth
-            Move bestMove = Move.NullMove;
-            int depth;
-            int bestScore = 0;
-            var totalSW = Stopwatch.StartNew();
-            positionsSearched = 0;
-
-            // Iterative deepening loop
-            for (depth = 1; depth <= MaxDepth; depth++)
-            {
-                // Alpha-Beta Pruning call
-                (Move move, int score) = AlphaBeta(board, depth, int.MinValue, int.MaxValue, 0);
-
-                // If we found a valid move, update the bestMove
-                if (!move.IsNull) {
-                    bestMove = move;
-                    bestScore = score;
-                }
-
-            }
-
-            board.MakeMove(bestMove);
-            // Console.WriteLine($"Ply: {board.PlyCount}, Depth: {depth-1}, Best Move: {bestMove}, Score: {bestScore}, Eval: {-EvaluateBoard(board)}, " +
-            //     $"Elapsed time: {Math.Round(totalSW.ElapsedMilliseconds / 1000f, 2)}, Piece count: {CountPiecesOnBoard(board)}, " +
-            //     $"Trans count: {transpositionTable.Count()}");
-            // Console.WriteLine(positionsSearched);
-            board.UndoMove(bestMove);
-
-            if (bestMove.IsNull) {
-                bestMove = GetOrderedMoves(board)[0];
-                // Console.WriteLine("first move from list");
-            }
-
-            return bestMove;
-        }
-
-        private (Move, int) AlphaBeta(Board board, int depth, int alpha, int beta, int moveNumber = 0, bool allowNullMove = true) {
-            positionsSearched++;
-            
-            if (depth == 0) {
-                return (Move.NullMove, EvaluateBoard(board));
-            }
-
-            ulong zobristKey = board.ZobristKey;
-
-            if (transpositionTable.TryGetValue(zobristKey, out TranspositionTableEntry entry)) {
-                if (entry.Depth >= depth) {
-                    switch (entry.Flag) {
-                        case 0: // exact
-                            return (entry.BestMove, entry.Score);
-                        case 1: // lower bound
-                            alpha = Math.Max(alpha, entry.Score);
-                            break;
-                        case 2: // upper bound
-                            beta = Math.Min(beta, entry.Score);
-                            break;
-                    }
-                    if (alpha >= beta)
-                        return (entry.BestMove, entry.Score);
-                }
-            }
-
-            // Null move pruning
-            //if (allowNullMove && depth >= 5 && !board.IsInCheck()) {
-            //    board.TrySkipTurn();
-            //    (_, int nullScore) = AlphaBeta(board, depth - 1 - 1, -beta, -beta + 1, moveNumber, false); // R = 2 is common
-            //    nullScore = -nullScore;
-            //    board.UndoSkipTurn();
-
-            //    if (nullScore >= beta)
-            //        return (Move.NullMove, beta); // Cutoff
-            //}
-
-            Move[] moves = GetOrderedMoves(board);
-            if(moves.Length == 0) {
-                if (board.IsInCheck()){
-                    return (Move.NullMove, -int.MaxValue);
-                }
-                return (Move.NullMove, 0);
-            }
-
-            Move bestMove = Move.NullMove;
-            int bestScore = int.MinValue;
-
-            foreach (Move move in moves) {
-                board.MakeMove(move);
-
-                int newDepth = depth - 1;
-
-                // Apply Late Move Reduction
-                //if (moveNumber >= 6 && depth >= 2 && !move.IsCapture) {
-                //    newDepth -= 1; // Reduce the depth by 1
-                //}
-
-                (_, int score) = AlphaBeta(board, newDepth, -beta, -alpha, moveNumber + 1);
-                score = -score;
-
-                // If a reduced move has a good score, re-search it at the normal depth
-                //if (moveNumber >= 4 && score > alpha && newDepth != depth - 1) {
-                //    (_, score) = AlphaBeta(board, depth - 1, -beta, -alpha, moveNumber + 1);
-                //    score = -score;
-                //}
-
-                board.UndoMove(move);
-
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMove = move;
-                }
-                if (score >= beta) {
-                    if (killerMoves.Count >= MAX_KILLER_MOVES)
-                        killerMoves.RemoveAt(0);
-                    killerMoves.Add(move);
-                    break;
-                }
-
-                alpha = Math.Max(alpha, score);
-                if (alpha >= beta)
-                    break;
-            }
-
-            // Store result in the transposition table
-            TranspositionTableEntry newEntry = new TranspositionTableEntry {
-                Depth = depth,
-                Score = bestScore,
-                BestMove = bestMove,
-                Flag = bestScore <= alpha ? 2 : (bestScore >= beta ? 1 : 0)
-            };
-
-            transpositionTable[zobristKey] = newEntry;
-
-            return (bestMove, bestScore);
-        }
-
-        private int QuiescenceSearch(Board board, int alpha, int beta) {
-            int standPat = EvaluateBoard(board);
-            if (standPat >= beta)
-                return beta;
-            if (standPat > alpha)
-                alpha = standPat;
-
-            Move[] capturesAndChecks = GetOrderedMoves(board, true); // Implement a function that returns only capturing and checking moves
-
-            foreach (Move move in capturesAndChecks) {
-                board.MakeMove(move);
-                int score = -QuiescenceSearch(board, -beta, -alpha);
-                board.UndoMove(move);
-
-                if (score >= beta)
-                    return beta;
-                if (score > alpha)
-                    alpha = score;
-            }
-
-            return alpha;
-        }
-
-
-
-
-        private Move IterativeDeepening(Board board, Timer timer) {
-            Move bestMove = Move.NullMove;
-            Move bestMoveThisDepth = Move.NullMove;
-            int totalPieces = CountPiecesOnBoard(board);
-
-            bool isOpening = totalPieces > 29;
-            bool isMidgame = totalPieces <= 29 && totalPieces > 15;
-            bool isEndgame = totalPieces <= 15;
-            bool isEndEndgame = totalPieces <= 5;
-
-            int depthMaxTime = 200;
-
-            if (isOpening) {
-                MaxDepth = 10;
-            }
-            else if (isMidgame) {
-                MaxDepth = 12;
-            }
-            else if (isEndgame) {
-                MaxDepth = 30;
-            }
-            else if (isEndEndgame) {
-                MaxDepth = 33;
-            }
-            //MaxDepth = 4;
-
-            Stopwatch totalSW = new();
-            totalSW.Start();
-
-            Stopwatch depthSW = new();
-
-            int depth = 1;
-            int score = 0;
-            bool foundMate = false;
-
-            while (depth <= MaxDepth && !foundMate) {
-                depthSW.Restart();
-
-                try {
-                    int alpha = int.MinValue;
-                    int beta = int.MaxValue;
-                    //score = AlphaBetaSearch(board, 0, depth, alpha, beta, ref bestMoveThisDepth);
-                    //score = AlphaBetaSearch(board, depth, alpha, beta, board.IsWhiteToMove, ref bestMoveThisDepth, timer, ref depthSW, depthMaxTime);
-                    // Only set the bestMove if a move was found at this depth
-                    if (bestMoveThisDepth != Move.NullMove) {
-                        bestMove = bestMoveThisDepth;
-                    }
-                }
-
-                catch (Exception e) when (e.Message == "Time limit exceeded") {
-                    if (bestMoveThisDepth != Move.NullMove) {
-                        bestMove = bestMoveThisDepth;
-                    }
-                    break;
-                }
-                if (bestMoveThisDepth != Move.NullMove) {
-                    bestMove = bestMoveThisDepth;
-                }
-
-                //if (score == (this.isWhite ? int.MaxValue : int.MinValue)) {
-                //    if (bestMoveThisDepth != Move.NullMove) {
-                //        bestMove = bestMoveThisDepth;
-                //    }
-                //    foundMate = true;
-                //    break;
-                //}
-
-                depth++;
-            }
-
-            if (bestMove == Move.NullMove) {
-                Move[] moves = GetOrderedMoves(board);
-                bestMove = moves[0];
-                // Console.WriteLine("first move from list");
-            }
-
-            totalSW.Stop();
-
-            depthSW.Reset();
-
-            board.MakeMove(bestMove);
-            // Console.WriteLine($"Ply: {board.PlyCount}, Depth: {depth - 1}, Best Move: {bestMove}, Score: {score}, Eval: {EvaluateBoard(board)}, " +
-            //     $"Elapsed time: {Math.Round(totalSW.ElapsedMilliseconds / 1000f, 2)}, Piece count: {CountPiecesOnBoard(board)}, " +
-            //     $"Trans count: {transpositionTable.Count()}");
-            // Console.WriteLine(positionsSearched);
-            //Console.WriteLine(lastSearchedPos);
-            //Console.WriteLine(board.GetFenString());
-            board.UndoMove(bestMove);
-
-            //transpositionTable.Clear();
-
-            positionsSearched = 0;
-
-            return bestMove;
-        }
-
-
-        private int AlphaBetaSearch(Board board, int depth, int alpha, int beta, bool maximizingPlayer, ref Move bestMove, Timer timer, ref Stopwatch sw, int depthMaxTime = 6000, bool doNullMove = true) {
-            positionsSearched++;
-            // Time check
-            if (sw.ElapsedMilliseconds > depthMaxTime && doNullMove) {
-                throw new Exception("Time limit exceeded");
-            }
-
-            // Terminal node: checkmate or stalemate
-            if (board.IsInCheckmate() || board.IsDraw()) {
-                return EvaluateBoard(board);
-            }
-            if (depth == 0) {
-                return EvaluateBoard(board);
-            }
-
-            // Null move pruning(makes blunders)
-            //if (doNullMove && depth >= 4 && !board.IsInCheck()) {
-            //    board.TrySkipTurn();
-            //    int nullScore = -AlphaBetaSearch(board, depth - 2, -beta, -beta + 1, !maximizingPlayer, ref bestMove, timer, ref sw, depthMaxTime, false);
-            //    board.UndoSkipTurn();
-            //    if (nullScore >= beta) {
-            //        return beta; // beta-cutoff
-            //    }
-            //}
-
-            // Check if the position is in the transposition table
-            //var (transpositionTableScore, transpositionTableMove, transpositionTableDepth, transpositionTableType) = transpositionTable.Get(board.ZobristKey);
-
-            //if (transpositionTableScore != null && transpositionTableDepth >= depth) {
-            //    if (transpositionTableType == ScoreType.Exact)
-            //        return transpositionTableScore.Value;
-            //    else if (transpositionTableType == ScoreType.Alpha)
-            //        alpha = Math.Max(alpha, transpositionTableScore.Value);
-            //    else if (transpositionTableType == ScoreType.Beta)
-            //        beta = Math.Min(beta, transpositionTableScore.Value);
-
-            //    if (alpha >= beta)
-            //        return transpositionTableScore.Value;  // Cutoff
-            //}
-
-            Move[] moves = GetOrderedMoves(board);
-            if(moves.Length == 0) {
-                return EvaluateBoard(board);
-            }
-
-            //Move[] moves = board.GetLegalMoves();
-            Move bestMoveForThisDepth = Move.NullMove;
-            //ScoreType scoreType = ScoreType.Alpha;
-
-            // Order the killer moves first, then by moves from transposition table
-            //moves = moves.OrderByDescending(move => killerMoves.Contains(move) ? 2 : (move == transpositionTableMove ? 1 : 0)).ToArray();
-
-
-            for (int i = 0; i < moves.Length; i++) {
-                Move move = moves[i];
-                board.MakeMove(move);
-                lastSearchedPos = board.GetFenString();
-
-                int tempScore;
-
-                try {
-                    if (maximizingPlayer) {
-                        tempScore = AlphaBetaSearch(board, depth - 1, alpha, beta, false, ref bestMoveForThisDepth, timer, ref sw, depthMaxTime);
-                        if (tempScore > alpha) {
-                            // Verify if this 'move' leads to a valid state before considering it as the best move
-                            alpha = tempScore;  // Alpha acts like max in MiniMax
-                            bestMove = move;
-                            //scoreType = ScoreType.Exact;
-                        }
-                    }
-                    else {
-                        tempScore = AlphaBetaSearch(board, depth - 1, alpha, beta, true, ref bestMoveForThisDepth, timer, ref sw, depthMaxTime);
-                        if (tempScore < beta) {
-                            beta = tempScore;  // Beta acts like min in MiniMax
-                            bestMove = move;
-                            //scoreType = ScoreType.Exact;
-                        }
-                    }
-                }
-                finally {
-                    board.UndoMove(move);
-                }
-
-                // If cutoff, then add the move to killerMoves and return the cutoff value
-                if (maximizingPlayer && tempScore >= beta) {
-                    if (killerMoves.Count >= MAX_KILLER_MOVES)
-                        killerMoves.RemoveAt(0);
-                    killerMoves.Add(move);
-                    return beta;  // Beta cutoff
-                }
-
-                if (!maximizingPlayer && tempScore <= alpha) {
-                    if (killerMoves.Count >= MAX_KILLER_MOVES)
-                        killerMoves.RemoveAt(0);
-                    killerMoves.Add(move);
-                    return alpha;  // Alpha cutoff
-                }
-            }
-
-            // No cutoff or exact value found, this is a "real" score
-            //if (scoreType != ScoreType.Exact) {
-            //    scoreType = maximizingPlayer ? ScoreType.Alpha : ScoreType.Beta;
-            //}
-
-            //transpositionTable.Add(board.ZobristKey, maximizingPlayer ? alpha : beta, bestMove, depth, scoreType);
-
-            return maximizingPlayer ? alpha : beta;
-        }
-
-        private int EvaluateBoard(Board board) {
-
-            // Check for end of game conditions and return corresponding score.
-            if (board.IsInCheckmate()) {
-                return board.IsWhiteToMove ? -int.MaxValue : int.MaxValue;
-            }
-            if (board.IsDraw()) {
-                return 0;
-            }
-
-            int score = 0;
 
             ulong whitePieces = board.WhitePiecesBitboard;
             ulong blackPieces = board.BlackPiecesBitboard;
@@ -803,147 +274,718 @@ namespace ChessChallenge.Example
             int totalPieces = CountPiecesOnBoard(board);
 
             bool isOpening = totalPieces > 25;
-            bool isMidgame = totalPieces <= 25 && totalPieces > 15;
-            bool isEndgame = totalPieces <= 15 && totalPieces > 8;
-            bool isEndEndgame = totalPieces <= 8;
+            bool isMidgame = totalPieces <= 25 && totalPieces > 13;
+            bool isEndEndgame = totalPieces < 13;
+            bool isWhiteToMove = board.IsWhiteToMove;
+
+            Square whiteKingSquare = board.GetKingSquare(true);
+            Square blackKingSquare = board.GetKingSquare(false);
 
 
-            //BitboardHelper.VisualizeBitboard(centerSquares);
-
-            // Center control score can be calculated by counting the number of set bits in the intersection of pieces and center squares
             int whiteCenterControlScore = BitboardHelper.GetNumberOfSetBits(whitePieces & centerSquares);
             int blackCenterControlScore = BitboardHelper.GetNumberOfSetBits(blackPieces & centerSquares);
 
 
             // In the opening and midgame, add score for center control and subtract for king safety
             if (isOpening || isMidgame) {
-                score += (whiteCenterControlScore - blackCenterControlScore) * 10;
+                float openingScalingFactor = Clamp(totalPieces / 20f, 0f, 1f);
 
-                Square whiteKingSquare = board.GetKingSquare(true);
-                Square blackKingSquare = board.GetKingSquare(false);
-                if (whiteKingSquare.File >= 4 && whiteKingSquare.File <= 5) {
-                    score -= 25;
+                score += (whiteCenterControlScore - blackCenterControlScore) * 16f * openingScalingFactor;
+            }
+
+            ulong whitePawns = board.GetPieceBitboard(PieceType.Pawn, true);
+            ulong blackPawns = board.GetPieceBitboard(PieceType.Pawn, false);
+            ulong allPawns = whitePawns | blackPawns;
+
+            // Doubled Pawns
+            int whiteDoubledPawnsPenalty = doubledPawnPenaltyByCount[CountDoubledPawns(whitePawns)];
+            int blackDoubledPawnsPenalty = doubledPawnPenaltyByCount[CountDoubledPawns(blackPawns)];
+            score += whiteDoubledPawnsPenalty - blackDoubledPawnsPenalty;
+
+            // Isolated Pawns
+            int whiteIsolatedPawnPenalty = isolatedPawnPenaltyByCount[CountIsolatedPawns(whitePawns)];
+            int blackIsolatedPawnsPenalty = isolatedPawnPenaltyByCount[CountIsolatedPawns(blackPawns)];
+            score += whiteIsolatedPawnPenalty - blackIsolatedPawnsPenalty;
+
+            // Passed Pawns
+            int whitePassedPawnsBonus = CountPassedPawnsBonuses(whitePawns, blackPawns, true);
+            int blackPassedPawnsBonus = CountPassedPawnsBonuses(blackPawns, whitePawns, false);
+            score += whitePassedPawnsBonus - blackPassedPawnsBonus;
+
+            // Rooks on Open Files
+            int whiteRooksOnOpenFiles = CountRooksOnOpenFiles(board.GetPieceBitboard(PieceType.Rook, true), allPawns);
+            int blackRooksOnOpenFiles = CountRooksOnOpenFiles(board.GetPieceBitboard(PieceType.Rook, false), allPawns);
+            score += (whiteRooksOnOpenFiles - blackRooksOnOpenFiles) * 50f;
+
+            // Bishop Pair
+            bool whiteHasBishopPair = BitCount(board.GetPieceBitboard(PieceType.Bishop, true)) >= 2;
+            bool blackHasBishopPair = BitCount(board.GetPieceBitboard(PieceType.Bishop, false)) >= 2;
+            score += (whiteHasBishopPair ? 40 : 0) - (blackHasBishopPair ? 40 : 0);
+
+            // Pawn Shield
+            float pawnShieldMultiplier = CalculateMultiplier(totalPieces, 18, 22);
+            if (pawnShieldMultiplier != 0) {
+                float whitePawnShieldMissingCount = EvaluateMissingPawnShieldCount(board, whiteKingSquare, true);
+                float blackPawnShieldMissingCount = EvaluateMissingPawnShieldCount(board, blackKingSquare, false);
+
+                score += ((whitePawnShieldMissingCount * -25f) - (blackPawnShieldMissingCount * -25f)) * pawnShieldMultiplier;
+            }
+
+            //// Virtual King Mobility *UNUSED*
+            //float virtualKingMobilityMultiplier = CalculateMultiplier(totalPieces, 23, 29);
+            //if (virtualKingMobilityMultiplier != 0) {
+            //    int whiteKingVirtualMobilityCount = CountKingVirtualMobility(whiteKingSquare, board.AllPiecesBitboard, true);
+            //    int blackKingVirtualMobilityCount = CountKingVirtualMobility(blackKingSquare, board.AllPiecesBitboard, false);
+            //    score += ((whiteKingVirtualMobilityCount * -12f) - (blackKingVirtualMobilityCount * -12f)) * virtualKingMobilityMultiplier;
+            //}
+
+            //// Mop-up Evaluation *UNUSED*
+            //float mopUpMultiplier = 1 - CalculateMultiplier(totalPieces, 3, 13);
+            //score += MopUpEval(allPawns, whiteMatScore, blackMatScore, mopUpMultiplier, whiteKingSquare, blackKingSquare) -
+            //    MopUpEval(allPawns, blackMatScore, whiteMatScore, mopUpMultiplier, blackKingSquare, whiteKingSquare);
+
+            //// Space (How to win at Chess P.112) and King Safety *UNUSED*
+            //float spaceFactor = 1 - CalculateMultiplier(totalPieces, 14, 20);
+            //if (spaceFactor <= 0f) {
+            //    ulong whitePiecesViewInEnemyTerritory = 0;
+            //    ulong blackPiecesViewInEnemyTerritory = 0;
+
+            //    ulong blackMask = blackTerritoryMask;
+            //    ulong whiteMask = whiteTerritoryMask;
+
+            //    foreach (PieceType pieceType in pieceTypes) {
+            //        if (pieceType == PieceType.None || pieceType == PieceType.King || pieceType == PieceType.Knight || pieceType == PieceType.Pawn) continue;
+
+            //        ulong whitePiecesBB = board.GetPieceBitboard(pieceType, true);
+            //        ulong blackPiecesBB = board.GetPieceBitboard(pieceType, false);
+
+            //        while (whitePiecesBB != 0) {
+            //            Square square = new Square(BitboardHelper.ClearAndGetIndexOfLSB(ref whitePiecesBB));
+            //            ulong attacks = BitboardHelper.GetPieceAttacks(pieceType, square, board, true);
+            //            whitePiecesViewInEnemyTerritory |= attacks & blackMask;
+            //            whitePiecesViewInEnemyTerritory &= ~whitePieces;
+            //        }
+
+            //        while (blackPiecesBB != 0) {
+            //            Square square = new Square(BitboardHelper.ClearAndGetIndexOfLSB(ref blackPiecesBB));
+            //            ulong attacks = BitboardHelper.GetPieceAttacks(pieceType, square, board, false);
+            //            blackPiecesViewInEnemyTerritory |= attacks & whiteMask;
+            //            blackPiecesViewInEnemyTerritory &= ~blackPieces;
+            //        }
+            //    }
+
+            //    score += (BitboardHelper.GetNumberOfSetBits(whitePiecesViewInEnemyTerritory) - BitboardHelper.GetNumberOfSetBits(blackPiecesViewInEnemyTerritory)) * 20f * spaceFactor;
+
+            //}
+
+            return (int) Round(isWhiteToMove ? score : -score);
+        }
+
+        #region Evaluation Functions
+        float MopUpEval(ulong allPawns, float ownMaterial, float enemyMaterial, float mopUpMultiplier, Square ownKingSquare, Square enemyKingSquare) {
+            if (mopUpMultiplier != 0 && BitCount(allPawns) <= 5 && ownMaterial >= enemyMaterial + 1500) {
+                float mopUpScore = 0f;
+
+                mopUpScore += (14 - ChessChallenge.Chess.PrecomputedMoveData.OrthogonalDistance[ownKingSquare.Index, enemyKingSquare.Index]) * 17;
+
+                mopUpScore += ChessChallenge.Chess.PrecomputedMoveData.CentreManhattanDistance[enemyKingSquare.Index] * 37f;
+
+                return mopUpScore * mopUpMultiplier;
+            }
+            return 0;
+        }
+        int CountKingVirtualMobility(Square kingSquare, ulong blockers, bool isWhite) {
+            return BitCount(BitboardHelper.GetPieceAttacks(PieceType.Queen, kingSquare, blockers, isWhite));
+        }
+        int EvaluateMissingPawnShieldCount(Board board, Square kingSquare, bool isWhite) {
+            // Directly check if the king is on a castling square
+            bool hasCastled = isWhite ? 
+                (kingSquare.Index == 6 || kingSquare.Index == 2 || kingSquare.Index == 7 || kingSquare.Index == 1 || kingSquare.Index == 0) :
+                (kingSquare.Index == 62 || kingSquare.Index == 58 || kingSquare.Index == 59 || kingSquare.Index == 57 || kingSquare.Index == 56);
+            if (!hasCastled) {
+                return 0;
+            }
+
+            ulong pawnBitboard = board.GetPieceBitboard(PieceType.Pawn, isWhite);
+            ulong shieldSquares = GetPawnShieldSquares(kingSquare, isWhite);
+
+            int missingShieldPawns = BitboardHelper.GetNumberOfSetBits(shieldSquares & ~pawnBitboard);
+
+            return missingShieldPawns;
+        }
+        ulong GetPawnShieldSquares(Square kingSquare, bool isWhite) {
+            return isWhite ? PrecomputedEvaluationData.whitePawnShieldSquares[kingSquare.Index] :
+                PrecomputedEvaluationData.blackPawnShieldSquares[kingSquare.Index];
+        }
+        ulong GetKingSurroundingSquares(bool isWhite) {
+            // Masks for A and H files
+            ulong notAFile = 0xFEFEFEFEFEFEFEFE;
+            ulong notHFile = 0x7F7F7F7F7F7F7F7F;
+
+            // Get the king's square
+            Square kingSquare = board.GetKingSquare(isWhite);
+
+            // Convert the king's square to a bitboard using the Index property
+            ulong kingBitboard = 1UL << kingSquare.Index;
+
+            // Calculate the surrounding squares
+            ulong surroundingSquares = kingBitboard
+                | (kingBitboard << 8) | (kingBitboard >> 8) // squares above and below the king
+                | ((kingBitboard & notHFile) << 1) // squares to the right of the king
+                | ((kingBitboard & notHFile) << 9) // square above and to the right of the king
+                | ((kingBitboard & notHFile) >> 7) // square below and to the right of the king
+                | ((kingBitboard & notAFile) >> 1) // squares to the left of the king
+                | ((kingBitboard & notAFile) >> 9) // square above and to the left of the king
+                | ((kingBitboard & notAFile) << 7); // square below and to the left of the king
+
+            return surroundingSquares;
+        }
+        ulong BlendBitboards(ulong bb1, ulong bb2, float weight) {
+            if (weight < 0f) return bb1;
+            if (weight > 1f) return bb2;
+
+            int bitsFromBB1 = (int)(weight * 64); // 64 bits in a ulong
+            ulong result = 0;
+
+            for (int i = 0; i < 32; i++) {
+                // Check the higher bit (from the outside)
+                if ((bb1 & (1UL << (63 - i))) != 0 && bitsFromBB1 > 0) {
+                    result |= (1UL << (63 - i));
+                    bitsFromBB1--;
                 }
-                if (blackKingSquare.File >= 4 && blackKingSquare.File <= 5) {
-                    score += 25;
+                else if ((bb2 & (1UL << (63 - i))) != 0) {
+                    result |= (1UL << (63 - i));
+                }
+
+                // Check the lower bit (from the outside)
+                if ((bb1 & (1UL << i)) != 0 && bitsFromBB1 > 0) {
+                    result |= (1UL << i);
+                    bitsFromBB1--;
+                }
+                else if ((bb2 & (1UL << i)) != 0) {
+                    result |= 1UL << i;
                 }
             }
 
-            score += CountMaterial(board, true) - CountMaterial(board, false);
-            score += (int) Math.Round(EvaluatePieceSquareTables(board, true) - EvaluatePieceSquareTables(board, false) * 0.9);
+            return result;
+        }
 
-            if (!board.IsWhiteToMove) {
-                //Console.WriteLine("black eval");
-                score = -score;
-            }
+        // Calculate the scaling factor based on the number of total pieces
+        float CalculateMultiplier(int totalPieces, int min, int max) {
+            // Ensure totalPieces is within the [min, max] range
+            totalPieces = totalPieces < min ? min : (totalPieces > max ? max : totalPieces);
 
-            return score;
+            // Directly return the scaling factor without extra variables
+            return (float)(totalPieces - min) / (max - min);
         }
 
 
-        private int EvaluatePieceSquareTables(Board board, bool isWhite) {
-            int value = 0;
+        float EvaluatePieceSquareTable(ulong[][] table, PieceList pl) {
+            float value = 0;
+            foreach (Piece p in pl) {
+                Square sq = p.Square;
+                float pieceActivityMultiplier = 1f;
 
-            PieceType[] pieceTypes = { PieceType.Pawn, PieceType.Knight, PieceType.Bishop, PieceType.Rook, PieceType.Queen };
+                //if (p.PieceType == PieceType.Bishop || p.PieceType == PieceType.Rook || p.PieceType == PieceType.Queen) {
+                //    int pieceVision = BitCount(BitboardHelper.GetPieceAttacks(p.PieceType, sq, board, p.IsWhite) & ~(p.IsWhite ? board.WhitePiecesBitboard : board.BlackPiecesBitboard));
+                //    pieceActivityMultiplier = Clamp(pieceVision / 3f + .22f, 0f, 1f);
+                //}
 
-            for (int i = 0; i < pieceTypes.Length; i++) {
-                int pieceTypeInt = (int)pieceTypes[i];
-                int adjustment = (((pieceValues[pieceTypeInt] - 100) / (i == 1 || i == 2 ? 4 : 5)) + 100) / 100;
-                value += EvaluatePieceSquareTable(board, pieceTypes[i], board.GetPieceList(pieceTypes[i], isWhite), isWhite) * adjustment;
+                value += (table[(int)p.PieceType][sq.File >= 4 ? 7 - sq.File : sq.File] << 8 * (pl.IsWhitePieceList ? 7 - sq.Rank : sq.Rank) >> 56) * pieceActivityMultiplier;
             }
-
-            return value;
+            return 25 * value;
         }
-
-        private static int EvaluatePieceSquareTable(Board board, PieceType pieceType, PieceList pieceList, bool isWhite) {
-            int value = 0;
-            int pieceTypeInt = (int)pieceType;
-            int pieceCount = CountPiecesOnBoard(board);
-            bool isEndGame = IsEndgame(board);
-            bool isEndEndGame = isEndGame && pieceCount <= 5;
-
-            int[] kingTable = isEndGame ? KingMiddleGameTable : KingEndGameTable;
-            if (isEndEndGame) {
-                kingTable = KingEndEndGameTable.Select(x => (int)(x * 1.5)).ToArray();
-            }
-
-            for (int i = 0; i < pieceList.Count; i++) {
-                Square square = pieceList[i].Square;
-                int squareIndex = isWhite ? square.File + square.Rank * 8 : square.File + (7 - square.Rank) * 8;
-
-                int[]? pieceSquareTable = pieceTypeInt switch {
-                    (int)PieceType.Pawn => isEndGame ? PawnTable : PawnEndGameTable,
-                    (int)PieceType.Knight => KnightTable,
-                    (int)PieceType.Bishop => BishopTable,
-                    (int)PieceType.Rook => RookTable,
-                    (int)PieceType.Queen => QueenTable,
-                    (int)PieceType.King => kingTable,
-                    _ => null
-                };
-
-                if (pieceSquareTable != null) {
-                    value += pieceSquareTable[squareIndex];
-                }
-            }
-
-            return value;
-        }
-        private static int EvaluatePieceSquareTable(Board board, PieceType pieceType, Square square, bool isWhite) {
-            int value = 0;
-            int pieceTypeInt = (int)pieceType;
-            int pieceCount = CountPiecesOnBoard(board);
-            bool isEndGame = IsEndgame(board);
-            bool isEndEndGame = isEndGame && pieceCount <= 5;
-
-            int[] kingTable = isEndGame ? KingMiddleGameTable : KingEndGameTable;
-            if (isEndEndGame) {
-                kingTable = KingEndEndGameTable.Select(x => (int)(x * 1.5)).ToArray();
-            }
-
-            int squareIndex = isWhite ? square.File + square.Rank * 8 : square.File + (7 - square.Rank) * 8;
-
-            int[]? pieceSquareTable = pieceTypeInt switch {
-                (int)PieceType.Pawn => isEndGame ? PawnTable : PawnEndGameTable,
-                (int)PieceType.Knight => KnightTable,
-                (int)PieceType.Bishop => BishopTable,
-                (int)PieceType.Rook => RookTable,
-                (int)PieceType.Queen => QueenTable,
-                (int)PieceType.King => kingTable,
-                _ => null
-            };
-
-            if (pieceSquareTable != null) {
-                value += pieceSquareTable[squareIndex];
-            }
-
-            return value;
-        }
-
-
-
-        private int CountMaterial(Board board, bool white) {
+        int CountMaterial(Board board, bool white) {
             int material = 0;
 
-            material += BitboardHelper.GetNumberOfSetBits(board.GetPieceBitboard(PieceType.Pawn, white)) * pieceValues[1];
-            material += BitboardHelper.GetNumberOfSetBits(board.GetPieceBitboard(PieceType.Knight, white)) * pieceValues[2];
-            material += BitboardHelper.GetNumberOfSetBits(board.GetPieceBitboard(PieceType.Bishop, white)) * pieceValues[3];
-            material += BitboardHelper.GetNumberOfSetBits(board.GetPieceBitboard(PieceType.Rook, white)) * pieceValues[4];
-            material += BitboardHelper.GetNumberOfSetBits(board.GetPieceBitboard(PieceType.Queen, white)) * pieceValues[5];
+            material += BitCount(board.GetPieceBitboard(PieceType.Pawn, white)) * pieceValues[1];
+            material += BitCount(board.GetPieceBitboard(PieceType.Knight, white)) * pieceValues[2];
+            material += BitCount(board.GetPieceBitboard(PieceType.Bishop, white)) * pieceValues[3];
+            material += BitCount(board.GetPieceBitboard(PieceType.Rook, white)) * pieceValues[4];
+            material += BitCount(board.GetPieceBitboard(PieceType.Queen, white)) * pieceValues[5];
 
             return material;
         }
 
+        static int CountDoubledPawns(ulong bitboard) {
+            int doubledCount = 0;
 
-        private Move[] GetOrderedMoves(Board board, bool onlyCaptures=false) {
+            foreach (ulong file in files) {
+                // Count the number of pawns on this file
+                int pawnsOnFile = BitCount(bitboard & file);
+
+                // If there's more than one pawn on this file, increment the doubled count
+                if (pawnsOnFile > 1) {
+                    doubledCount += pawnsOnFile - 1; // Add (pawnsOnFile - 1) to the count for each additional pawn on the same file
+                }
+            }
+
+            return doubledCount;
+        }
+        static int CountIsolatedPawns(ulong bitboard) {
+            int isolatedCount = 0;
+
+            for (int i = 0; i < 8; i++) {
+                ulong currentFile = files[i];
+                ulong pawnsOnCurrentFile = bitboard & currentFile;
+
+                if (pawnsOnCurrentFile == 0)
+                    continue; // No pawns on this file, skip to the next file
+
+                ulong adjacentPawns = 0;
+
+                // Check left adjacent file if not on file A
+                if (i > 0)
+                    adjacentPawns |= bitboard & files[i - 1];
+
+                // Check right adjacent file if not on file H
+                if (i < 7)
+                    adjacentPawns |= bitboard & files[i + 1];
+
+                // If no pawns on adjacent files, then all pawns on the current file are isolated
+                if (adjacentPawns == 0)
+                    isolatedCount += BitCount(pawnsOnCurrentFile);
+            }
+
+            return isolatedCount;
+        }
+        public static int CountPassedPawnsBonuses(ulong ownPawns, ulong opponentPawns, bool isWhite) {
+            int passedBonus = 0;
+
+            while (ownPawns != 0) {
+                // Get the least significant bit's position
+                ulong lsb = ownPawns & (~ownPawns + 1);
+
+                ulong blockingRegion = CalculatePassedPawnBlockedRegion(lsb, isWhite);
+
+                if ((blockingRegion & opponentPawns) == 0) {
+                    int distance = CalculatePassedPawnDistance(lsb, isWhite);
+                    passedBonus += passedPawnBonuses[distance];
+                }
+
+                ownPawns &= ownPawns - 1;
+            }
+
+            return passedBonus;
+        }
+        static ulong CalculatePassedPawnBlockedRegion(ulong lsb, bool isWhite) {
+            return isWhite ? PrecomputedEvaluationData.whitePassedPawnBlockedRegion[GetSquareIndex(lsb)] :
+                PrecomputedEvaluationData.blackPassedPawnBlockedRegion[GetSquareIndex(lsb)];
+        }
+        static int CalculatePassedPawnDistance(ulong lsb, bool isWhite) {
+            Square square = new Square(GetSquareIndex(lsb));
+            return isWhite ? 7 - square.Rank : square.Rank;
+        }
+
+        static int CountRooksOnOpenFiles(ulong rooks, ulong allPawns) {
+            int openFileRooks = 0;
+
+            while (rooks != 0) {
+                // Get the least significant bit's position (the position of one of the rooks)
+                ulong lsb = rooks & (~rooks + 1);
+
+                // Create a mask for the file this rook is on
+                ulong fileMask = NorthFill(lsb) | SouthFill(lsb);
+
+                // Check if there are no pawns on this file
+                if ((fileMask & allPawns) == 0)
+                    openFileRooks++;
+
+                // Clear the least significant bit (move to the next rook)
+                rooks ^= lsb;
+            }
+
+            return openFileRooks;
+        }
+
+        #endregion
+
+        #region Evaluation Helpers
+        public static int GetSquareIndex(ulong bitboard) {
+            // Ensure that there is exactly one bit set in the bitboard
+            if (bitboard == 0 || (bitboard & (bitboard - 1)) != 0) {
+                throw new ArgumentException("Bitboard must have exactly one bit set.");
+            }
+
+            return BitOperations.TrailingZeroCount(bitboard);
+        }
+        ulong SquareToBitboard(Square square) {
+            return 1UL << (square.Index);
+        }
+        private static ulong NorthOne(ulong bb) => bb << 8;
+        private static ulong SouthOne(ulong bb) => bb >> 8;
+        private static ulong EastOne(ulong bb) => (bb & 0xFEFEFEFEFEFEFEFE) << 1;
+        private static ulong WestOne(ulong bb) => (bb & 0x7F7F7F7F7F7F7F7F) >> 1;
+
+        private static ulong NorthFill(ulong bb) {
+            bb |= bb << 8;
+            bb |= bb << 16;
+            bb |= bb << 32;
+            return bb;
+        }
+
+        private static ulong SouthFill(ulong bb) {
+            bb |= bb >> 8;
+            bb |= bb >> 16;
+            bb |= bb >> 32;
+            return bb;
+        }
+        #endregion
+
+        SearchReturn Search(int depthLeft, int checkExtensionsLeft, bool isCaptureOnly, int alpha = -32200, int beta = 32200) {
+            if (board.IsInCheckmate())
+                return new SearchReturn(-32100, default, true);
+
+            if (board.IsDraw())
+                return new SearchReturn(0, default, board.IsInStalemate() || board.IsInsufficientMaterial());
+
+            if (depthLeft == 0) {
+                ++depthLeft;
+                if (board.IsInCheck() && checkExtensionsLeft > 0)
+                    --checkExtensionsLeft;
+                else if (!isCaptureOnly && checkExtensionsLeft == 4)
+                    return Search(8, checkExtensionsLeft, true, alpha, beta);
+                else
+                    return new SearchReturn(EvaluateBoard(), default, true);
+            }
+
+            ulong key = board.ZobristKey;
+            Entry trans = _transpositions[key % 16777216];
+            int bestScore = -32150, score;
+            Move best = default;
+            if (trans.Key == key && Abs(trans.Depth) >= depthLeft) {
+                board.MakeMove(trans.Move);
+                bool toDraw = board.IsDraw();
+                board.UndoMove(trans.Move);
+
+                if (toDraw)
+                    trans = default;
+                else {
+                    alpha = Max(alpha, bestScore = trans.Score);
+                    best = trans.Move;
+                    if (beta < alpha || trans.Depth >= 0)
+                        return new SearchReturn(trans.Score, trans.Move, true);
+                }
+            }
+
+            if (isCaptureOnly && (score = EvaluateBoard()) > bestScore && beta < (alpha = Max(alpha, bestScore = score)))
+                return new SearchReturn(score, default, true);
+
+            Span<Move> legal = stackalloc Move[218];
+            board.GetLegalMovesNonAlloc(ref legal, isCaptureOnly);
+
+            Span<ScoredMove> prioritizedMoves = stackalloc ScoredMove[legal.Length];
+            int loopvar = 0;
+
+            OrderMoves(board, ref legal, ref prioritizedMoves, trans);
+
+            bool canUseTranspositions = true, approximate = false, canUse;
+            loopvar = 0;
+            foreach (ScoredMove scoredMove in prioritizedMoves) {
+                searchCancelled = timer.MillisecondsElapsedThisTurn >= budget && !searchCancelled;
+
+                if (searchCancelled)
+                    return new SearchReturn(bestScore, best, canUseTranspositions);
+
+                Move move = scoredMove.Move;
+                board.MakeMove(move);
+                try {
+                    if (depthLeft >= 3 && ++loopvar >= 4 && !move.IsCapture) {
+                        score = -Search(depthLeft - 2, checkExtensionsLeft, isCaptureOnly, -beta, -alpha).Score;
+
+                        if (searchCancelled)
+                            break;
+
+                        if (score < bestScore)
+                            continue;
+                    }
+                    SearchReturn searchReturn = Search(depthLeft - 1, checkExtensionsLeft, isCaptureOnly, -beta, -alpha);
+                    score = searchReturn.Score;
+                    canUse = searchReturn.CanUseTranspositions;
+
+                    if (searchCancelled)
+                        break;
+
+                    score = -score + (Abs(score) >= 30000 ? Sign(score) : 0);
+
+                    if (score <= bestScore)
+                        continue;
+
+                    bestScore = score;
+                    best = move;
+                    alpha = Max(alpha, score);
+                    canUseTranspositions = canUse;
+
+                    if (approximate = beta < alpha) {
+                        _killerMoves.Add(move);
+
+                        int moveColourIndex = board.IsWhiteToMove ? 0 : 1;
+                        _history[moveColourIndex, move.StartSquare.Index, move.TargetSquare.Index] += depthLeft * depthLeft;
+                        break;
+                    }
+                }
+                finally {
+                    board.UndoMove(move);
+                }
+            }
+            if (!searchCancelled && !isCaptureOnly && canUseTranspositions && bestScore != 0) {
+                _transpositions[key % 16777216] = new Entry { Key = key, Depth = (short)(approximate ? -depthLeft : depthLeft), Score = (short)bestScore, Move = best };
+                transCount++;
+            }
+
+            return new SearchReturn(bestScore, best, canUseTranspositions);
+        }
+        void OrderMoves(Board board, ref Span<Move> legals, ref Span<ScoredMove> prioritizedMoves, Entry trans) {
+            int loopvar = 0;
+            int totalPieces = CountPiecesOnBoard(board);
+
+            bool isOpening = totalPieces > 25;
+            bool isMidgame = totalPieces <= 25 && totalPieces > 15;
+            float endgameT = totalPieces < 25 ? (25f - totalPieces) / 23f : 0f;
+
+            ulong zobristKey = board.ZobristKey;
+
+            foreach (var lmove in legals) {
+                float moveScore = 0f;
+                Piece movePiece = board.GetPiece(lmove.StartSquare);
+                Piece capturePiece = board.GetPiece(lmove.TargetSquare);
+                PieceType movePieceType = movePiece.PieceType;
+                PieceType capturePieceType = capturePiece.PieceType;
+                Square targetSquare = lmove.TargetSquare;
+
+                // Transposition table move
+                if (zobristKey == trans.Key && lmove == trans.Move) {
+                    prioritizedMoves[loopvar++] = new ScoredMove(hashMoveScore, lmove);
+                    continue;
+                }
+                // Killer moves
+                else if (_killerMoves.Contains(lmove)) {
+                    moveScore += killerBias;
+                }
+
+                // Promotion
+                if (lmove.IsPromotion) {
+                    moveScore += promoteBias;
+                }
+
+                // Encourage central control
+                if ((isOpening || isMidgame) && targetSquare.File >= 3 && targetSquare.File <= 4 && targetSquare.Rank >= 3 && targetSquare.Rank <= 4) {
+                    moveScore += 75f * (1 - endgameT);
+                }
+
+                // Prioritize pawn advances with endgameT scaling
+                if (movePieceType == PieceType.Pawn && !isOpening) {
+                    moveScore += (movePiece.IsWhite ? targetSquare.Rank : 7 - targetSquare.Rank) * 50f * endgameT;
+                }
+
+                // Castling
+                if ((isOpening || isMidgame) && lmove.IsCastles) {
+                    moveScore += 75f;
+                }
+
+                // Capture evaluation
+                if (lmove.IsCapture) {
+                    // Order moves to try capturing the most valuable opponent piece with least valuable of own pieces first
+                    float captureMaterialDelta = capturePieceValues[(int)capturePieceType] - capturePieceValues[(int)movePieceType];
+                    bool opponentCanRecapture = board.SquareIsAttackedByOpponent(targetSquare);
+                    if (opponentCanRecapture) {
+                        moveScore += (captureMaterialDelta >= 0 ? winningCaptureBias : losingCaptureBias) + captureMaterialDelta;
+                    }
+                    else {
+                        moveScore += winningCaptureBias + captureMaterialDelta;
+                    }
+                }
+                // History Heuristic
+                else {
+                    int moveColourIndex = board.IsWhiteToMove ? 0 : 1;
+                    moveScore += _history[moveColourIndex, lmove.StartSquare.Index, lmove.TargetSquare.Index];
+                }
+
+                //moveScore += ((0x0953310 >> 4 * (int)lmove.CapturePieceType) & 0xf) * 100;
+
+                //prioritizedMoves[loopvar++] = (moveScore, lmove);
+                prioritizedMoves[loopvar++] = new ScoredMove(moveScore, lmove);
+            }
+            // Hybrid Sorting
+            if (prioritizedMoves.Length <= 5) {
+                InsertionSort(ref prioritizedMoves);
+            }
+            else {
+                QuickSort(ref prioritizedMoves, 0, prioritizedMoves.Length - 1);
+            }
+        }
+        #region Sorting Algorithms
+        void InsertionSort(ref Span<ScoredMove> moves) {
+            for (int i = 1; i < moves.Length; i++) {
+                var key = moves[i];
+                int j = i - 1;
+
+                while (j >= 0 && moves[j].Score < key.Score) {
+                    moves[j + 1] = moves[j];
+                    j--;
+                }
+                moves[j + 1] = key;
+            }
+        }
+        void QuickSort(ref Span<ScoredMove> data, int left, int right) {
+            if (left < right) {
+                int pivotIndex = Partition(ref data, left, right);
+                QuickSort(ref data, left, pivotIndex - 1);
+                QuickSort(ref data, pivotIndex + 1, right);
+            }
+        }
+
+        int Partition(ref Span<ScoredMove> data, int left, int right) {
+            ScoredMove pivot = data[right];
+            int i = left - 1;
+
+            for (int j = left; j < right; j++) {
+                if (data[j].Score > pivot.Score) { // Descending order
+                    i++;
+                    Swap(ref data[i], ref data[j]);
+                }
+            }
+
+            Swap(ref data[i + 1], ref data[right]);
+            return i + 1;
+        }
+
+        void Swap(ref ScoredMove a, ref ScoredMove b) {
+            ScoredMove temp = a;
+            a = b;
+            b = temp;
+        }
+        #endregion
+        public Move Think(Board b, Timer t) {
+            board = b;
+            timer = t;
+
+            //List<string> toWrite = new List<string>();
+            //for (int i = 0; i <= 63; i++) {
+            //    ulong passedPawnBlockedRegion = CalculatePassedPawnBlockedRegion(IndexToBitboard(i), false);
+
+            //    string toAdd = ", " + passedPawnBlockedRegion.ToString();
+            //    toWrite.Add(toAdd);
+            //}
+            //string path = Path.Combine("E:\\Github\\ChessAI-Project\\Chess-Challenge-main\\Chess-Challenge\\resources", "Temp.txt");
+
+            //File.WriteAllLines(path, toWrite.ToArray());
+
+            //Console.WriteLine("done");
+
+            // Book moves
+            if (bookMoves && board.PlyCount <= 10) {
+                if (determinedFirstTwoMoves) {
+                    if (board.PlyCount == 0) {
+
+                        Move dMove = new Move("d2d4", board);
+                        Move eMove = new Move("e2e4", board);
+
+                        Random rand = new Random();
+
+                        Move selectedMove;
+
+                        if (rand.Next(2) == 0)  // Randomly generates 0 or 1
+                        {
+                            selectedMove = dMove;
+                        }
+                        else {
+                            selectedMove = eMove;
+                        }
+
+                        return selectedMove;
+                    }
+
+                    if (board.PlyCount == 1) {
+                        Move lastMove = board.GameMoveHistory[^1]; // Gets the last move
+                        Move nextMove;
+                        Random rand = new Random();
+
+                        if (lastMove.ToString() == "d2d4") {
+                            return new Move("d7d5", board);
+                        }
+                        else if (lastMove.ToString() == "e2e4") {
+                            if (rand.Next(4) == 0)  // Randomly generates 0 or 1
+                            {
+                                nextMove = new Move("e7e5", board);
+                            }
+                            else {
+                                nextMove = new Move("c7c5", board);
+                            }
+                            return nextMove;
+                        }
+                    }
+                }
+                if (openingBook.TryGetBookMove(board, out string moveString, 0.8)) {
+                    return new Move(moveString, board);
+                }
+            }
+
+            Stopwatch totalSW = new();
+            totalSW.Start();
+
+            if (useTimer) {
+                int myTimeRemainingMs = timer.MillisecondsRemaining;
+                int myIncrementMs = timer.IncrementMilliseconds;
+                // Get a fraction of remaining time to use for current move
+                double thinkTimeMs = myTimeRemainingMs / 40.0;
+                // Clamp think time if a maximum limit is imposed
+                if (useMaxThinkTime) {
+                    thinkTimeMs = Min(maxThinkTimeMs, thinkTimeMs);
+                }
+                // Add increment
+                if (myTimeRemainingMs > myIncrementMs * 2) {
+                    thinkTimeMs += myIncrementMs * 0.8;
+                }
+
+                double minThinkTime = Min(50, myTimeRemainingMs * 0.25);
+                budget = (float) Ceiling(Max(minThinkTime, thinkTimeMs));
+            }
+            else {
+                budget = maxTimePerMove;
+            }
+            searchCancelled = false;
+
+            _killerMoves.Clear();
+            _history = new int[2, 64, 64];
+
+            Move bestMove = default, move;
+
+            int depth = 0;
+            while (++depth <= 33 && !searchCancelled)
+                if ((move = Search(depth, 4, false).Move) != default)
+                    bestMove = move;
+
+            if (bestMove == default) {
+                if(printDebug)
+                    Console.WriteLine("First in list");
+
+                bestMove = board.GetLegalMoves()[0];
+            }
+
+            board.MakeMove(bestMove);
+            //Console.Clear();
+            if (printDebug) {
+                Console.WriteLine($"Ply: {board.PlyCount}, Depth: {depth - 1}, Best Move: {bestMove}" +
+                    $", Elapsed time: {Round((double)totalSW.ElapsedMilliseconds, 2)}");
+            }
+            board.UndoMove(bestMove);
+
+            totalSW.Stop();
+
+            return bestMove;
+        }
+
+        #region Unused
+        Move[] GetOrderedMoves(ref Span<Move> moves, Board board, Entry trans, bool onlyCaptures = false) {
             // Retrieve all legal moves
-            Span<Move> moves = stackalloc Move[218];
             board.GetLegalMovesNonAlloc(ref moves, onlyCaptures);
             int moveCount = moves.Length;
 
             // Use a tuple to hold both move and score, enabling sort of both with Array.Sort()
             (Move, int)[] moveScores = new (Move, int)[moveCount];
             for (int i = 0; i < moveCount; i++) {
-                moveScores[i] = (moves[i], EvaluateMoveHeuristic(moves[i], board));
+                moveScores[i] = (moves[i], EvaluateMoveHeuristic(moves[i], board, trans));
             }
 
             // Sort moveScores array by score (in descending order) using built-in Array.Sort
@@ -958,7 +1000,7 @@ namespace ChessChallenge.Example
             return sortedMoves;
         }
 
-        private int EvaluateMoveHeuristic(Move move, Board board) {
+        private int EvaluateMoveHeuristic(Move move, Board board, Entry trans) {
             int score = 0;
             Piece movePiece = board.GetPiece(move.StartSquare);
             Piece capturePiece = board.GetPiece(move.TargetSquare);
@@ -968,68 +1010,64 @@ namespace ChessChallenge.Example
             bool isWhite = movePiece.IsWhite;
             bool isEndGame = IsEndgame(board);
 
-            // MakeMove() and UndoMove() only once.
-            //board.MakeMove(move);
-            //bool isCheckmate = board.IsInCheckmate();
-            //bool isInCheck = board.IsInCheck();
-            //board.UndoMove(move);
-
             if (move.IsPromotion) {
-                score += 1400;
+                score += 1000;
             }
 
-            if (killerMoves.Contains(move)) {
-                score += 2000;
+            if (trans.Key == board.ZobristKey) {
+                score += 5000;
+            }
+            else if (_killerMoves.Contains(move)) {
+                score += 1000;
+            }
+
+            if (move.PromotionPieceType == PieceType.Queen) {
+                score += 500;
             }
 
             if (move.IsCapture) {
-                if (board.SquareIsAttackedByOpponent(targetSquare)) {
+                int whiteMaterial = CountMaterial(board, true) / 100;
+                int blackMaterial = CountMaterial(board, false) / 100;
+                int materialDifference = whiteMaterial - blackMaterial;
+
+                // Encourage equal captures when up in material
+                if (materialDifference > 0 && movePieceType == capturePiece.PieceType) {
+                    score += 300;
+                }
+                else if (materialDifference < 0 && movePieceType == capturePiece.PieceType) {
+                    score -= 500;
+                }
+
+                if (board.SquareIsAttackedByOpponent(targetSquare) && (int)capturePiece.PieceType < (int)movePieceType) {
                     score -= pieceValues[(int)movePieceType];
                 }
                 else {
-                    score += 1000 * ((int)capturePiece.PieceType - (int)movePieceType);
+                    score += 2 * ((int)capturePiece.PieceType - (int)movePieceType);
                 }
-            }
-
-            if (!movePiece.IsKing && !movePiece.IsPawn) {
-                score += EvaluatePieceSquareTable(board, movePieceType, targetSquare, isWhite)
-                        - EvaluatePieceSquareTable(board, movePieceType, startSquare, isWhite);
             }
 
             // Encourage central control
             if (targetSquare.File >= 3 && targetSquare.File <= 4 && targetSquare.Rank >= 3 && targetSquare.Rank <= 4) {
-                score += 100;
-            }
-
-            // Prioritize checks
-            //if (isInCheck) {
-            //    score += 300;
-            //}
-
-            // Prioritize centralization, particularly for knights and pawns
-            if (movePiece.IsKnight || movePiece.IsPawn) {
-                score += (int)((10 - Math.Max(Math.Abs(3.5 - targetSquare.File), Math.Abs(3.5 - targetSquare.Rank))) / 1.3);
+                score += 125;
             }
 
             // Prioritize pawn advances
             if (movePiece.IsPawn) {
-                score += (isWhite ? targetSquare.Rank : 7 - targetSquare.Rank) * 2;
+                score += (isWhite ? targetSquare.Rank : 7 - targetSquare.Rank) * 20;
             }
 
             // Encourage moves that keep or place the king in safety.
             if (movePiece.IsKing && !isEndGame) {
-                if (BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetKingAttacks(targetSquare)) <
-                    BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetKingAttacks(startSquare))) {
-                        score += 200;
+                if (BitCount(BitboardHelper.GetKingAttacks(targetSquare)) <
+                    BitCount(BitboardHelper.GetKingAttacks(startSquare))) {
+                    score += 200;
                 }
             }
 
             return score;
         }
-
-        public static int CountPiecesOnBoard(Board board) => BitboardHelper.GetNumberOfSetBits(board.AllPiecesBitboard);
-
-        private static bool IsEndgame(Board board) {
+        #endregion
+        static bool IsEndgame(Board board) {
             ulong whiteQueens = board.GetPieceBitboard(PieceType.Queen, true);
             ulong blackQueens = board.GetPieceBitboard(PieceType.Queen, false);
 
@@ -1050,14 +1088,324 @@ namespace ChessChallenge.Example
 
             return whiteQueenCondition || blackQueenCondition;
         }
-
-        private static int BitCount(ulong b) {
+        static int BitCount(ulong b) {
             int count = 0;
             while (b != 0) {
-                b &= b - 1; // Remove the least significant bit set
+                b &= b - 1;
                 count++;
             }
             return count;
+        }
+        static int CountPiecesOnBoard(Board board) => BitboardHelper.GetNumberOfSetBits(board.AllPiecesBitboard);
+        
+
+        static readonly ulong[] Knights = { 0x3234363636363432ul, 0x34383c3d3c3d3834ul, 0x363c3e3f3f3e3c36ul, 0x363c3f40403f3d36ul },
+                                       Bishops = { 0x3c3e3e3e3e3e3e3cul, 0x3e4040414042413eul, 0x3e4041414242403eul, 0x3e4042424242403eul },
+                                       Rooks = { 0x6465636363636364ul, 0x6466646464646464ul, 0x6466646464646464ul, 0x6466646464646465ul },
+                                       Queens = { 0xb0b2b2b3b4b2b2b0ul, 0xb2b4b4b4b4b5b4b2ul, 0xb2b4b5b5b5b5b5b2ul, 0xb3b4b5b5b5b5b4b3ul };
+        ulong[][] Starts = { null, new[] { 0x141e161514151514ul, 0x141e161514131614ul, 0x141e181614121614ul, 0x141e1a1918141014ul }, Knights, Bishops, Rooks,
+                                   Queens, new[] { 0x0004080a0c0e1414ul, 0x020406080a0c1416ul, 0x020406080a0c0f12ul, 0x02040406080c0f10ul } },
+                         Ends = { null, new[] { 0x14241e1a18161614ul, 0x14241e1a18161614ul, 0x14241e1a18161614ul, 0x14241e1a18161614ul }, Knights, Bishops, Rooks,
+                                   Queens, new[] { 0x0c0f0e0d0c0b0a06ul, 0x0e100f0e0d0c0b0aul, 0x0e1114171614100aul, 0x0e1116191815100aul } };
+
+        struct Entry
+        {
+            public ulong Key;
+            public short Score, Depth;
+            public Move Move;
+        }
+        struct ScoredMove
+        {
+            public float Score;
+            public Move Move;
+
+            public ScoredMove(float score, Move move) {
+                Score = score;
+                Move = move;
+            }
+        }
+        struct SearchReturn
+        {
+            public int Score;
+            public Move Move;
+            public bool CanUseTranspositions;
+
+            public SearchReturn(int score, Move move, bool canUseTranspositions) {
+                Score = score;
+                Move = move;
+                CanUseTranspositions = canUseTranspositions;
+            }
+        }
+        public static class PrecomputedEvaluationData 
+        {
+            public static ulong[] whitePawnShieldSquares = {
+                768
+                , 1792
+                , 3584
+                , 7168
+                , 14336
+                , 28672
+                , 57344
+                , 49152
+                , 196608
+                , 458752
+                , 917504
+                , 1835008
+                , 3670016
+                , 7340032
+                , 14680064
+                , 12582912
+                , 50331648
+                , 117440512
+                , 234881024
+                , 469762048
+                , 939524096
+                , 1879048192
+                , 3758096384
+                , 3221225472
+                , 12884901888
+                , 30064771072
+                , 60129542144
+                , 120259084288
+                , 240518168576
+                , 481036337152
+                , 962072674304
+                , 824633720832
+                , 3298534883328
+                , 7696581394432
+                , 15393162788864
+                , 30786325577728
+                , 61572651155456
+                , 123145302310912
+                , 246290604621824
+                , 211106232532992
+                , 844424930131968
+                , 1970324836974592
+                , 3940649673949184
+                , 7881299347898368
+                , 15762598695796736
+                , 31525197391593472
+                , 63050394783186944
+                , 54043195528445952
+                , 216172782113783808
+                , 504403158265495552
+                , 1008806316530991104
+                , 2017612633061982208
+                , 4035225266123964416
+                , 8070450532247928832
+                , 16140901064495857664
+                , 13835058055282163712
+                , 3
+                , 7
+                , 14
+                , 28
+                , 56
+                , 112
+                , 224
+                , 192
+            };
+
+            public static ulong[] blackPawnShieldSquares = {
+                216172782113783808
+                , 504403158265495552
+                , 1008806316530991104
+                , 2017612633061982208
+                , 4035225266123964416
+                , 8070450532247928832
+                , 16140901064495857664
+                , 13835058055282163712
+                , 3
+                , 7
+                , 14
+                , 28
+                , 56
+                , 112
+                , 224
+                , 192
+                , 768
+                , 1792
+                , 3584
+                , 7168
+                , 14336
+                , 28672
+                , 57344
+                , 49152
+                , 196608
+                , 458752
+                , 917504
+                , 1835008
+                , 3670016
+                , 7340032
+                , 14680064
+                , 12582912
+                , 50331648
+                , 117440512
+                , 234881024
+                , 469762048
+                , 939524096
+                , 1879048192
+                , 3758096384
+                , 3221225472
+                , 12884901888
+                , 30064771072
+                , 60129542144
+                , 120259084288
+                , 240518168576
+                , 481036337152
+                , 962072674304
+                , 824633720832
+                , 3298534883328
+                , 7696581394432
+                , 15393162788864
+                , 30786325577728
+                , 61572651155456
+                , 123145302310912
+                , 246290604621824
+                , 211106232532992
+                , 844424930131968
+                , 1970324836974592
+                , 3940649673949184
+                , 7881299347898368
+                , 15762598695796736
+                , 31525197391593472
+                , 63050394783186944
+                , 54043195528445952
+            };
+
+            public static ulong[] whitePassedPawnBlockedRegion = {
+                217020518514230017
+                , 506381209866536706
+                , 1012762419733073412
+                , 2025524839466146824
+                , 4051049678932293648
+                , 8102099357864587296
+                , 16204198715729174592
+                , 13889313184910721152
+                , 217020518514229504
+                , 506381209866535424
+                , 1012762419733070848
+                , 2025524839466141696
+                , 4051049678932283392
+                , 8102099357864566784
+                , 16204198715729133568
+                , 13889313184910704640
+                , 217020518514098176
+                , 506381209866207232
+                , 1012762419732414464
+                , 2025524839464828928
+                , 4051049678929657856
+                , 8102099357859315712
+                , 16204198715718631424
+                , 13889313184906477568
+                , 217020518480478208
+                , 506381209782190080
+                , 1012762419564380160
+                , 2025524839128760320
+                , 4051049678257520640
+                , 8102099356515041280
+                , 16204198713030082560
+                , 13889313183824347136
+                , 217020509873766400
+                , 506381188273799168
+                , 1012762376547598336
+                , 2025524753095196672
+                , 4051049506190393344
+                , 8102099012380786688
+                , 16204198024761573376
+                , 13889312906798956544
+                , 217018306555543552
+                , 506375682125725696
+                , 1012751364251451392
+                , 2025502728502902784
+                , 4051005457005805568
+                , 8102010914011611136
+                , 16204021828023222272
+                , 13889241988298964992
+                , 216454257090494464
+                , 504966108218916864
+                , 1009932216437833728
+                , 2019864432875667456
+                , 4039728865751334912
+                , 8079457731502669824
+                , 16158915463005339648
+                , 13871086852301127680
+                , 72057594037927936
+                , 144115188075855872
+                , 288230376151711744
+                , 576460752303423488
+                , 1152921504606846976
+                , 2305843009213693952
+                , 4611686018427387904
+                , 9223372036854775808
+            };
+
+            public static ulong[] blackPassedPawnBlockedRegion = {
+                1
+                , 2
+                , 4
+                , 8
+                , 16
+                , 32
+                , 64
+                , 128
+                , 259
+                , 519
+                , 1038
+                , 2076
+                , 4152
+                , 8304
+                , 16608
+                , 32960
+                , 66307
+                , 132871
+                , 265742
+                , 531484
+                , 1062968
+                , 2125936
+                , 4251872
+                , 8437952
+                , 16974595
+                , 34014983
+                , 68029966
+                , 136059932
+                , 272119864
+                , 544239728
+                , 1088479456
+                , 2160115904
+                , 4345496323
+                , 8707835655
+                , 17415671310
+                , 34831342620
+                , 69662685240
+                , 139325370480
+                , 278650740960
+                , 552989671616
+                , 1112447058691
+                , 2229205927687
+                , 4458411855374
+                , 8916823710748
+                , 17833647421496
+                , 35667294842992
+                , 71334589685984
+                , 141565355933888
+                , 284786447024899
+                , 570676717487879
+                , 1141353434975758
+                , 2282706869951516
+                , 4565413739903032
+                , 9130827479806064
+                , 18261654959612128
+                , 36240731119075520
+                , 72905330438374147
+                , 146093239676897031
+                , 292186479353794062
+                , 584372958707588124
+                , 1168745917415176248
+                , 2337491834830352496
+                , 4674983669660704992
+                , 9277627166483333312
+            };
+
         }
     }
 }
