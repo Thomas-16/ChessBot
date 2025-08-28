@@ -32,18 +32,6 @@ public static class Evaluation
                           | ((ulong)1 << new Square("d6").Index)
                           | ((ulong)1 << new Square("e6").Index);
     
-    // Masks for each file on the chessboard
-    static ulong[] files = {
-        0x0101010101010101, // File A
-        0x0202020202020202, // File B
-        0x0404040404040404, // File C
-        0x0808080808080808, // File D
-        0x1010101010101010, // File E
-        0x2020202020202020, // File F
-        0x4040404040404040, // File G
-        0x8080808080808080  // File H
-    };
-    
     static readonly int[] passedPawnBonuses = { 0, 120, 80, 50, 30, 15, 15 }; // bonus given to a passed pawn based on how close it is to promoting
     static readonly int[] isolatedPawnPenaltyByCount = { 0, -10, -25, -50, -75, -75, -75, -75, -75 };
 
