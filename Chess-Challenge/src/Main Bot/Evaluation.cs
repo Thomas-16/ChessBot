@@ -67,17 +67,31 @@ public static class Evaluation
         ulong whiteQueens = board.GetPieceBitboard(PieceType.Queen, true);
         ulong blackQueens = board.GetPieceBitboard(PieceType.Queen, false);
         
-        // Evaluate each piece type
-        evaluation += EvaluatePieceTypeBitboard(whitePawns, true, PieceType.Pawn, openingWeight, endGameWeight);
-        evaluation -= EvaluatePieceTypeBitboard(blackPawns, false, PieceType.Pawn, openingWeight, endGameWeight);
-        evaluation += EvaluatePieceTypeBitboard(whiteKnights, true, PieceType.Knight, openingWeight, endGameWeight);
-        evaluation -= EvaluatePieceTypeBitboard(blackKnights, false, PieceType.Knight, openingWeight, endGameWeight);
-        evaluation += EvaluatePieceTypeBitboard(whiteBishops, true, PieceType.Bishop, openingWeight, endGameWeight);
-        evaluation -= EvaluatePieceTypeBitboard(blackBishops, false, PieceType.Bishop, openingWeight, endGameWeight);
-        evaluation += EvaluatePieceTypeBitboard(whiteRooks, true, PieceType.Rook, openingWeight, endGameWeight);
-        evaluation -= EvaluatePieceTypeBitboard(blackRooks, false, PieceType.Rook, openingWeight, endGameWeight);
-        evaluation += EvaluatePieceTypeBitboard(whiteQueens, true, PieceType.Queen, openingWeight, endGameWeight);
-        evaluation -= EvaluatePieceTypeBitboard(blackQueens, false, PieceType.Queen, openingWeight, endGameWeight);
+        // Evaluate material
+        int whiteMaterialEval = EvaluateMaterial(whitePawns, PieceType.Pawn) +
+                                EvaluateMaterial(whiteKnights, PieceType.Knight) +
+                                EvaluateMaterial(whiteBishops, PieceType.Bishop) +
+                                EvaluateMaterial(whiteRooks, PieceType.Rook) +
+                                EvaluateMaterial(whiteQueens, PieceType.Queen);
+        int blackMaterialEval = EvaluateMaterial(blackPawns, PieceType.Pawn) +
+                                EvaluateMaterial(blackKnights, PieceType.Knight) +
+                                EvaluateMaterial(blackBishops, PieceType.Bishop) +
+                                EvaluateMaterial(blackRooks, PieceType.Rook) +
+                                EvaluateMaterial(blackQueens, PieceType.Queen);
+        evaluation += whiteMaterialEval - blackMaterialEval;
+        
+        // Evaluate piece square table
+        int whitePieceSquareTableEval = EvaluatePieceSquareTable(whitePawns, true, PieceType.Pawn, openingWeight, endGameWeight) +
+                                        EvaluatePieceSquareTable(whiteKnights, true, PieceType.Knight, openingWeight, endGameWeight) +
+                                        EvaluatePieceSquareTable(whiteBishops, true, PieceType.Bishop, openingWeight, endGameWeight) +
+                                        EvaluatePieceSquareTable(whiteRooks, true, PieceType.Rook, openingWeight, endGameWeight) +
+                                        EvaluatePieceSquareTable(whiteQueens, true, PieceType.Queen, openingWeight, endGameWeight);
+        int blackPieceSquareTableEval = EvaluatePieceSquareTable(blackPawns, false, PieceType.Pawn, openingWeight, endGameWeight) +
+                                        EvaluatePieceSquareTable(blackKnights, false, PieceType.Knight, openingWeight, endGameWeight) +
+                                        EvaluatePieceSquareTable(blackBishops, false, PieceType.Bishop, openingWeight, endGameWeight) +
+                                        EvaluatePieceSquareTable(blackRooks, false, PieceType.Rook, openingWeight, endGameWeight) +
+                                        EvaluatePieceSquareTable(blackQueens, false, PieceType.Queen, openingWeight, endGameWeight);
+        evaluation += whitePieceSquareTableEval - blackPieceSquareTableEval;
         
         // King evaluation - get squares and evaluate normally
         Square whiteKingSquare = board.GetKingSquare(true);
@@ -115,17 +129,19 @@ public static class Evaluation
         
         return board.IsWhiteToMove ? evaluation : -evaluation;
     }
-    
-    private static int EvaluatePieceTypeBitboard(ulong pieces, bool isWhite, PieceType pieceType, float openingWeight, float endGameWeight)
+
+    private static int EvaluateMaterial(ulong pieces, PieceType pieceType)
     {
-        int evaluation = 0;
         int pieceValue = PieceValues[(int)pieceType];
         
-        // Material evaluation
         int pieceCount = BitboardHelper.GetNumberOfSetBits(pieces);
-        evaluation += pieceValue * pieceCount;
+        return pieceValue * pieceCount;
+    }
+
+    private static int EvaluatePieceSquareTable(ulong pieces, bool isWhite, PieceType pieceType, float openingWeight, float endGameWeight)
+    {
+        int evaluation = 0;
         
-        // Piece-square table evaluation using bitboard iteration
         ulong piecesCopy = pieces;
         while (piecesCopy != 0)
         {
