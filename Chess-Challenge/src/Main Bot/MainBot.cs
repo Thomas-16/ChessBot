@@ -17,8 +17,6 @@ public class MainBot : IChessBot
     Stopwatch searchStopwatch;
 
     const int maxExtensions = 13;
-
-    const int ASPIRATION_WINDOW_INITIAL = 50;
     
     // Set hardTimeLimit to 0 to use match Timer in GUI mode
     int hardTimeLimit = 200; // ms
@@ -132,28 +130,7 @@ public class MainBot : IChessBot
                 break;
             }
             
-            int eval;
-            
-            // Use aspiration windows after depth 5 (when evaluation is more stable) and has time
-            if (softTimeLimit > 500 && depth >= 5 && Math.Abs(bestEval) < 29000)
-            {
-                int alpha = bestEval - ASPIRATION_WINDOW_INITIAL;
-                int beta = bestEval + ASPIRATION_WINDOW_INITIAL;
-    
-                eval = Search(board, depth, alpha, beta, true);
-    
-                if (!searchCanceledImmediately && (eval <= alpha || eval >= beta))
-                {
-                    // Re-search with full window
-                    eval = Search(board, depth, -9999999, 9999999, true);
-                }
-            }
-            else
-            {
-                // Use full window for shallow depths or when close to mate
-                eval = Search(board, depth, -9999999, 9999999, true);
-            }
-            
+            int eval = Search(board, depth, -9999999, 9999999, true);
             depthSearched++;
             
             // Iteration fully completed
