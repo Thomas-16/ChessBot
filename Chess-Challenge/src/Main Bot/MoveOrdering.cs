@@ -47,8 +47,6 @@ public class MoveOrdering
             int score = 0;
             Square startSquare = move.StartSquare;
             Square targetSquare = move.TargetSquare;
-            int startSquareIndex = Evaluation.GetSquareIndex(startSquare, board.IsWhiteToMove);
-            int targetSquareIndex = Evaluation.GetSquareIndex(targetSquare, board.IsWhiteToMove);
             
             PieceType movePieceType = move.MovePieceType;
             PieceType capturePieceType = move.CapturePieceType;
@@ -77,8 +75,8 @@ public class MoveOrdering
             }
             
             // Encourage moving into a better square(based on PST)
-            int toScore = Evaluation.GetPieceSquareValue(movePieceType, targetSquareIndex, openingWeight, endGameWeight);
-            int fromScore = Evaluation.GetPieceSquareValue(movePieceType, startSquareIndex, openingWeight, endGameWeight);
+            int toScore = Evaluation.GetPieceSquareValue(movePieceType, Evaluation.GetSquareIndex(targetSquare, board.IsWhiteToMove), openingWeight, endGameWeight);
+            int fromScore = Evaluation.GetPieceSquareValue(movePieceType, Evaluation.GetSquareIndex(startSquare, board.IsWhiteToMove), openingWeight, endGameWeight);
             score += toScore - fromScore;
             
             // Is not a pawn or a king and is going into a square the enemy is attacking
