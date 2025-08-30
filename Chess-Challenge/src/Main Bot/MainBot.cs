@@ -251,10 +251,12 @@ public class MainBot : IChessBot
         Move bestMoveThisPosition = Move.NullMove;
         int bestScore = int.MinValue;
         
-        foreach (Move move in movesSpan)
+        for (int i = 0; i < movesSpan.Length; i++)
         {
             if (searchCanceledImmediately)
                 break;
+            
+            Move move =  movesSpan[i];
                 
             board.MakeMove(move);
             
@@ -271,8 +273,29 @@ public class MainBot : IChessBot
                     extension = 1;
                 }
             }
+
+            bool needsFullSearch = true;
+            int score = 0;
             
-            int score = -Search(board, depth - 1 + extension, -beta, -alpha, false, numExtensions + extension, ply + 1);
+            // Late Move Reductions
+            // Reduce the depth of the search for moves later in the move list as these are less likely to be good
+            // (assuming our move ordering isn't terrible)
+            if (extension == 0 && depth >= 3 && i > 3 && !move.IsCapture && !move.IsPromotion && !board.IsInCheck())
+            {
+                int reduceDepth = 1;
+                if (i > 6) reduceDepth = 2;  // More aggressive for later moves
+                
+                score = -Search(board, depth - 1 - reduceDepth, -alpha - 1, -alpha, false, numExtensions + extension, ply + 1);
+                
+                // If the evaluation is better than expected, we'd better to a full-depth search to get a more accurate evaluation
+                needsFullSearch = score > alpha;
+            }
+            // Perform a full-depth search
+            if (needsFullSearch)
+            {
+                score = -Search(board, depth - 1 + extension, -beta, -alpha, false, numExtensions + extension, ply + 1);
+            }
+            
             board.UndoMove(move);
             
             if (searchCanceledImmediately)
