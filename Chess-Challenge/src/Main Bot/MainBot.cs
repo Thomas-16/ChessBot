@@ -33,8 +33,19 @@ public class MainBot : IChessBot
     
     int positionsEvaluated;
     
+    // Search logging variables
+    string logFilePath;
+    List<Move> currentPV = new List<Move>();
+    int currentBestEval;
+    bool isSearchCanceled;
+    bool isLogFileInitialized = false;
+    Dictionary<int, List<Move>> pvTable = new Dictionary<int, List<Move>>();
+    
     public Move Think(Board board, Timer timer)
     {
+        // Initialize logging
+        InitializeLogging(board);
+        
         if (!ChessChallenge.Application.Program.UCI_MODE && !guiModeIsTimerConfiged)
         {
             if (hardTimeLimit == 0)
@@ -50,6 +61,7 @@ public class MainBot : IChessBot
         
         // Book moves
         if (board.PlyCount <= 18 && openingBook.TryGetBookMove(board, out string moveString, 0.8)) {
+            LogBookMove(moveString);
             if(!ChessChallenge.Application.Program.UCI_MODE) Console.WriteLine($"Book move found: {moveString}");
             return new Move(moveString, board);
         }
@@ -59,6 +71,7 @@ public class MainBot : IChessBot
         bestMove = Move.NullMove;
         searchCanceledImmediately = false;
         searchCanceledAfterIteration = false;
+        isSearchCanceled = false;
         
         if (transpositionTable == null)
             transpositionTable = new TranspositionTable(64);
@@ -124,6 +137,8 @@ public class MainBot : IChessBot
             hardTimeLimit = Math.Max(hardTimeLimit, softTimeLimit + 10);
         }
         
+        LogSearchStart(board);
+        
         searchStopwatch = Stopwatch.StartNew();
         
         int bestEval = 0;
@@ -138,6 +153,11 @@ public class MainBot : IChessBot
                 break;
             }
             
+            LogIterationStart(depth);
+            
+            currentPV.Clear();
+            pvTable.Clear();
+            
             int eval = Search(board, depth, -9999999, 9999999, true);
             
             depthSearched++;
@@ -148,17 +168,21 @@ public class MainBot : IChessBot
                 bestMove = bestMoveThisIteration;
                 bestEval = eval;
                 
+                LogIterationResult(depth, bestMoveThisIteration, eval, false);
+                
                 bestMoveThisIteration = Move.NullMove;
                 
                 // Stop if we found a winning checkmate for us
                 if (eval > 29000)  // We're delivering mate
                 {
+                    LogMateFound(eval, depth);
                     break;
                 }
                 
                 // Stop if we hit soft time limit (iteration completed)
                 if (searchCanceledAfterIteration)
                 {
+                    LogSearchCanceled("soft time limit reached");
                     break;
                 }
             }
@@ -172,12 +196,20 @@ public class MainBot : IChessBot
                     // Since our move ordering will always put the best move found so far first
                     bestMove = bestMoveThisIteration;
                     bestEval = eval;
+                    LogIterationResult(depth, bestMoveThisIteration, eval, true);
+                }
+                else
+                {
+                    LogSearchCanceled("hard time limit reached during iteration " + depth);
                 }
                 break;
             }
         }
         
         searchStopwatch.Stop();
+        
+        LogSearchComplete(depthSearched, bestMove, bestEval);
+        
         if(!ChessChallenge.Application.Program.UCI_MODE)
             Console.WriteLine($"Depth searched: {depthSearched}, Final move: {bestMove.ToString()}, Time took: {searchStopwatch.ElapsedMilliseconds}ms, " +
                         $"Positions evaluated: {positionsEvaluated}, Score: {bestEval}");
@@ -185,6 +217,7 @@ public class MainBot : IChessBot
         if (bestMove == Move.NullMove)
         {
             bestMove = board.GetLegalMoves()[0];
+            LogFallbackMove(bestMove);
             if(!ChessChallenge.Application.Program.UCI_MODE) Console.WriteLine("Best move not found, using first legal move");
         }
 
@@ -206,6 +239,11 @@ public class MainBot : IChessBot
     
     int Search(Board board, int depth, int alpha, int beta, bool isRoot, int numExtensions = 0, int ply = 0, Move prevMove = default)
     {
+        // Initialize PV for this ply
+        if (!pvTable.ContainsKey(ply))
+            pvTable[ply] = new List<Move>();
+        pvTable[ply].Clear();
+        
         // Check time limit periodically (not every node to avoid overhead)
         if (positionsEvaluated % 1000 == 0)
         {
@@ -213,6 +251,7 @@ public class MainBot : IChessBot
             if (searchStopwatch.ElapsedMilliseconds > hardTimeLimit)
             {
                 searchCanceledImmediately = true;
+                isSearchCanceled = true;
                 return 0;
             }
             // Hit soft limit
@@ -305,6 +344,24 @@ public class MainBot : IChessBot
             {
                 bestScore = score;
                 bestMoveThisPosition = move;
+                
+                // Update PV - copy the line from the child node and prepend this move
+                pvTable[ply].Clear();
+                pvTable[ply].Add(move);
+                
+                // Copy child PV if it exists
+                if (pvTable.ContainsKey(ply + 1))
+                {
+                    pvTable[ply].AddRange(pvTable[ply + 1]);
+                }
+                
+                // Update root PV
+                if (isRoot)
+                {
+                    currentBestEval = score;
+                    currentPV.Clear();
+                    currentPV.AddRange(pvTable[ply]);
+                }
             }
             
             if (score >= beta) // fail-high cutoff
@@ -415,6 +472,183 @@ public class MainBot : IChessBot
         }
         
         return alpha;
+    }
+    
+    // Logging methods
+    private void InitializeLogging(Board board)
+    {
+        try
+        {
+            if (!isLogFileInitialized)
+            {
+                string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                logFilePath = Path.Combine(@"E:\Coding\ChessBot\Search Logs", $"game_log_{timestamp}.txt");
+                
+                using (StreamWriter writer = new StreamWriter(logFilePath, false))
+                {
+                    writer.WriteLine($"=== Chess Engine Game Log ===");
+                    writer.WriteLine($"Game started: {DateTime.Now}");
+                    writer.WriteLine();
+                }
+                isLogFileInitialized = true;
+            }
+            
+            // Log this specific search start
+            using (StreamWriter writer = new StreamWriter(logFilePath, true))
+            {
+                writer.WriteLine($"--- Search #{board.PlyCount / 2 + 1} ---");
+                writer.WriteLine($"Position FEN: {board.GetFenString()}");
+                writer.WriteLine($"Move to play: {(board.IsWhiteToMove ? "White" : "Black")}");
+                writer.WriteLine($"Ply count: {board.PlyCount}");
+            }
+        }
+        catch
+        {
+            // If we can't create the log file, just continue without logging
+            logFilePath = null;
+        }
+    }
+    
+    private void LogBookMove(string moveString)
+    {
+        if (logFilePath == null) return;
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(logFilePath, true))
+            {
+                writer.WriteLine($"Book move found: {moveString}");
+                writer.WriteLine();
+            }
+        }
+        catch { }
+    }
+    
+    private void LogSearchStart(Board board)
+    {
+        if (logFilePath == null) return;
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(logFilePath, true))
+            {
+                writer.WriteLine($"Starting search with FEN: {board.GetFenString()}");
+                writer.WriteLine($"Time limits - Soft: {softTimeLimit}ms, Hard: {hardTimeLimit}ms");
+                writer.WriteLine();
+            }
+        }
+        catch { }
+    }
+    
+    private void LogIterationStart(int depth)
+    {
+        if (logFilePath == null) return;
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(logFilePath, true))
+            {
+                writer.WriteLine($"Starting Iteration: {depth}");
+            }
+        }
+        catch { }
+    }
+    
+    private void LogIterationResult(int depth, Move bestMove, int eval, bool wasCanceled)
+    {
+        if (logFilePath == null) return;
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(logFilePath, true))
+            {
+                string status = wasCanceled ? " (partial result)" : "";
+                writer.WriteLine($"Iteration result: {bestMove} Eval: {eval}{status}");
+                
+                // Build PV string
+                StringBuilder pvBuilder = new StringBuilder();
+                if (currentPV.Count > 0)
+                {
+                    for (int i = 0; i < currentPV.Count; i++)
+                    {
+                        if (i > 0) pvBuilder.Append(" ");
+                        pvBuilder.Append(currentPV[i].ToString());
+                    }
+                }
+                else if (bestMove != Move.NullMove)
+                {
+                    pvBuilder.Append(bestMove.ToString());
+                }
+                
+                writer.WriteLine($"Iteration pv: PV (depth = {depth}): {pvBuilder}");
+                writer.WriteLine($"Time: {searchStopwatch.ElapsedMilliseconds}ms, Nodes: {positionsEvaluated}");
+                writer.WriteLine();
+            }
+        }
+        catch { }
+    }
+    
+    private void LogMateFound(int eval, int depth)
+    {
+        if (logFilePath == null) return;
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(logFilePath, true))
+            {
+                int mateInMoves = (30000 - eval + depth) / 2;
+                writer.WriteLine($"Mate found! Mate in {mateInMoves} moves (eval: {eval})");
+            }
+        }
+        catch { }
+    }
+    
+    private void LogSearchCanceled(string reason)
+    {
+        if (logFilePath == null) return;
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(logFilePath, true))
+            {
+                writer.WriteLine($"Search cancelled: {reason}");
+                if (bestMove != Move.NullMove)
+                {
+                    writer.WriteLine($"Using partial search result: {bestMove} Eval: {currentBestEval}");
+                }
+                writer.WriteLine();
+            }
+        }
+        catch { }
+    }
+    
+    private void LogSearchComplete(int depthSearched, Move finalMove, int finalEval)
+    {
+        if (logFilePath == null) return;
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(logFilePath, true))
+            {
+                writer.WriteLine($"=== Search Complete ===");
+                writer.WriteLine($"Final depth searched: {depthSearched}");
+                writer.WriteLine($"Final move: {finalMove}");
+                writer.WriteLine($"Final evaluation: {finalEval}");
+                writer.WriteLine($"Total time: {searchStopwatch.ElapsedMilliseconds}ms");
+                writer.WriteLine($"Total positions evaluated: {positionsEvaluated}");
+                writer.WriteLine($"Nodes per second: {(positionsEvaluated * 1000.0 / Math.Max(1, searchStopwatch.ElapsedMilliseconds)):F0}");
+                writer.WriteLine($"Completed at: {DateTime.Now}");
+                writer.WriteLine("=====================================\n");
+                writer.WriteLine();
+            }
+        }
+        catch { }
+    }
+    
+    private void LogFallbackMove(Move fallbackMove)
+    {
+        if (logFilePath == null) return;
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(logFilePath, true))
+            {
+                writer.WriteLine($"WARNING: No best move found, using fallback: {fallbackMove}");
+            }
+        }
+        catch { }
     }
     
     private static string LoadBookData()
