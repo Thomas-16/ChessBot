@@ -26,14 +26,9 @@ public class RepetitionTable
         for (int i = 0; i < initialHashes.Length; i++)
         {
             hashes[i] = initialHashes[i];
+            startIndices[i] = 0;
         }
-    
-        // Set all start indices to count (current position)
-        // This prevents checking historical positions for repetitions
-        for (int i = 0; i <= count; i++)
-        {
-            startIndices[i] = count;
-        }
+        startIndices[count] = 0;
     }
 
 
