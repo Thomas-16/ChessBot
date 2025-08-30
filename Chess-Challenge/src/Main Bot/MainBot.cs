@@ -3,6 +3,8 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Collections.Generic;
+using System.Text;
 
 public class MainBot : IChessBot
 {
@@ -11,6 +13,7 @@ public class MainBot : IChessBot
     
     TranspositionTable? transpositionTable;
     MoveOrdering? moveOrdering;
+    RepetitionTable? repetitionTable;
     
     OpeningBook openingBook = new(LoadBookData());
     
@@ -62,9 +65,14 @@ public class MainBot : IChessBot
             
         if (moveOrdering == null)
             moveOrdering = new MoveOrdering();
+
+        if (repetitionTable == null)
+            repetitionTable = new RepetitionTable();
         
         moveOrdering.ResetKillers();
         moveOrdering.ResetHistory();
+        
+        repetitionTable.Init(board);
         
         // Set time limit based on timer mode
         if (useMoveTime) {
@@ -131,6 +139,7 @@ public class MainBot : IChessBot
             }
             
             int eval = Search(board, depth, -9999999, 9999999, true);
+            
             depthSearched++;
             
             // Iteration fully completed
@@ -195,7 +204,7 @@ public class MainBot : IChessBot
         useTimer = true;
     }
     
-    int Search(Board board, int depth, int alpha, int beta, bool isRoot, int numExtensions = 0, int ply = 0)
+    int Search(Board board, int depth, int alpha, int beta, bool isRoot, int numExtensions = 0, int ply = 0, Move prevMove = default)
     {
         // Check time limit periodically (not every node to avoid overhead)
         if (positionsEvaluated % 1000 == 0)
@@ -233,7 +242,14 @@ public class MainBot : IChessBot
             return -30000 + depth;  // Add depth to prefer shorter mates
         }
         
-        if (board.IsDraw())
+        // Check repetition table
+        // (Note: returns a draw score even if this position has only appeared once for sake of simplicity)
+        if (repetitionTable.Contains(zobristKey))
+        {
+            return 0;
+        }
+        
+        if (board.IsFiftyMoveDraw() || board.IsInsufficientMaterial() || board.IsInStalemate())
         {
             positionsEvaluated++;
             return 0;
@@ -247,6 +263,13 @@ public class MainBot : IChessBot
         Span<Move> movesSpan = stackalloc Move[218];
         board.GetLegalMovesNonAlloc(ref movesSpan);
         moveOrdering.OrderMoves(board, ref movesSpan, false, ply, ttMove);
+        
+        if (ply > 0)
+        {
+            // Record position in repetition table
+            bool shouldReset = prevMove.IsCapture || prevMove.MovePieceType == PieceType.Pawn;
+            repetitionTable.Push(board.ZobristKey, shouldReset);
+        }
         
         Move bestMoveThisPosition = Move.NullMove;
         int bestScore = int.MinValue;
@@ -272,7 +295,7 @@ public class MainBot : IChessBot
                 }
             }
             
-            int score = -Search(board, depth - 1 + extension, -beta, -alpha, false, numExtensions + extension, ply + 1);
+            int score = -Search(board, depth - 1 + extension, -beta, -alpha, false, numExtensions + extension, ply + 1, move);
             board.UndoMove(move);
             
             if (searchCanceledImmediately)
@@ -300,6 +323,12 @@ public class MainBot : IChessBot
 
                 // Store as LOWER bound at this node
                 transpositionTable.StoreEntry(zobristKey, beta, depth, NodeType.LowerBound, bestMoveThisPosition);
+                
+                if (ply > 0)
+                {
+                    repetitionTable.TryPop();
+                }
+                
                 return beta; // fail-hard
             }
 
@@ -319,6 +348,11 @@ public class MainBot : IChessBot
             
             if (isRoot)
                 bestMoveThisIteration = bestMoveThisPosition;
+        }
+        
+        if (ply > 0)
+        {
+            repetitionTable.TryPop();
         }
             
         return bestScore;
