@@ -377,6 +377,21 @@ public class MainBot : IChessBot
         if (evaluation >= beta)
             return beta;
         
+        // Delta Pruning
+        // If we're so far below alpha that even capturing the queen won't help, we can prune
+        // This is the maximum material we could possibly gain from a single capture
+        const int deltaMargin = 900; // Queen value
+        
+        if (evaluation < alpha - deltaMargin)
+        {
+            // We're so far behind that no single capture can help
+            // Unless we're in check (then we must search all moves)
+            if (!board.IsInCheck())
+            {
+                return alpha; // Fail-low, return alpha
+            }
+        }
+        
         alpha = Math.Max(alpha, evaluation);
         
         Span<Move> capturesSpan = stackalloc Move[218];
@@ -388,6 +403,27 @@ public class MainBot : IChessBot
             // Check cancellation before making a move
             if (searchCanceledImmediately)
                 return evaluation;  // Return static eval when canceled
+            
+            // Futility Pruning (more granular delta pruning per move)
+            // Skip captures that can't possibly raise alpha
+            if (!board.IsInCheck() && !capture.IsPromotion)
+            {
+                // Estimate the maximum gain from this capture
+                int capturedPieceValue = 0;
+                if (capture.CapturePieceType != PieceType.None)
+                {
+                    capturedPieceValue = Evaluation.PieceValues[(int)capture.CapturePieceType];
+                }
+                
+                // Add a small margin for positional gains
+                const int futilityMargin = 50;
+                
+                // If even after capturing this piece we're still below alpha minus margin, skip it
+                if (evaluation + capturedPieceValue + futilityMargin < alpha)
+                {
+                    continue; // Skip this capture, it won't help
+                }
+            }
             
             board.MakeMove(capture);
             int value = -QuiescenceSearch(board, -beta, -alpha);
