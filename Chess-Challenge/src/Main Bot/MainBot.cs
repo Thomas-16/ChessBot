@@ -280,7 +280,7 @@ public class MainBot : IChessBot
             // Late Move Reductions
             // Reduce the depth of the search for moves later in the move list as these are less likely to be good
             // (assuming our move ordering isn't terrible)
-            if (extension == 0 && depth >= 3 && i > 3 && !move.IsCapture && !move.IsPromotion && !board.IsInCheck())
+            if (extension == 0 && depth >= 3 && i > 3 && !move.IsCapture && !move.IsPromotion)
             {
                 int reduceDepth = 1;
                 if (i > 6) reduceDepth = 2;  // More aggressive for later moves
