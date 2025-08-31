@@ -250,13 +250,15 @@ public class MainBot : IChessBot
         
         Move bestMoveThisPosition = Move.NullMove;
         int bestScore = int.MinValue;
+        bool pvNode = beta - alpha > 1; // Detect if this is a PV node
+        bool searchedPvMove = false; // Track if we've searched at least one move with full window
         
         for (int i = 0; i < movesSpan.Length; i++)
         {
             if (searchCanceledImmediately)
                 break;
             
-            Move move =  movesSpan[i];
+            Move move = movesSpan[i];
                 
             board.MakeMove(move);
             
@@ -274,26 +276,39 @@ public class MainBot : IChessBot
                 }
             }
 
-            bool needsFullSearch = true;
-            int score = 0;
+            int score;
+            int newDepth = depth - 1 + extension;
             
-            // Late Move Reductions
-            // Reduce the depth of the search for moves later in the move list as these are less likely to be good
-            // (assuming our move ordering isn't terrible)
-            if (extension == 0 && depth >= 3 && i > 3 && !move.IsCapture && !move.IsPromotion)
+            // Principal Variation Search
+            if (searchedPvMove)
             {
-                int reduceDepth = 1;
-                if (i > 6) reduceDepth = 2;  // More aggressive for later moves
+                // For all moves after the first PV move, search with null window first
+                // This is a scout search to see if the move is worth investigating further
                 
-                score = -Search(board, depth - 1 - reduceDepth, -alpha - 1, -alpha, false, numExtensions + extension, ply + 1);
+                // Late Move Reductions
+                int reduction = 0;
+                if (extension == 0 && depth >= 3 && i > 3 && !move.IsCapture && !move.IsPromotion)
+                {
+                    reduction = 1;
+                    if (i > 6) reduction = 2;  // More aggressive for later moves
+                }
                 
-                // If the evaluation is better than expected, we'd better to a full-depth search to get a more accurate evaluation
-                needsFullSearch = score > alpha;
+                // Null window search (also called scout search)
+                score = -Search(board, newDepth - reduction, -alpha - 1, -alpha, false, numExtensions + extension, ply + 1);
+                
+                // If the move appears to be better than alpha (and no reduction was applied OR score > alpha despite reduction)
+                // we need to re-search with full window to get accurate score
+                if (score > alpha && (score < beta || reduction > 0))
+                {
+                    // Re-search with full window and no reduction
+                    score = -Search(board, newDepth, -beta, -alpha, false, numExtensions + extension, ply + 1);
+                }
             }
-            // Perform a full-depth search
-            if (needsFullSearch)
+            else
             {
-                score = -Search(board, depth - 1 + extension, -beta, -alpha, false, numExtensions + extension, ply + 1);
+                // First move or PV node - search with full window
+                score = -Search(board, newDepth, -beta, -alpha, false, numExtensions + extension, ply + 1);
+                searchedPvMove = true;
             }
             
             board.UndoMove(move);
@@ -329,6 +344,7 @@ public class MainBot : IChessBot
             if (score > alpha)
             {
                 alpha = score;
+                searchedPvMove = true; // We found a new best move, so this becomes our PV
             }
         }
         
