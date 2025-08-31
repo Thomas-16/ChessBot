@@ -250,7 +250,6 @@ public class MainBot : IChessBot
         
         Move bestMoveThisPosition = Move.NullMove;
         int bestScore = int.MinValue;
-        bool pvNode = beta - alpha > 1; // Detect if this is a PV node
         bool searchedPvMove = false; // Track if we've searched at least one move with full window
         
         for (int i = 0; i < movesSpan.Length; i++)
