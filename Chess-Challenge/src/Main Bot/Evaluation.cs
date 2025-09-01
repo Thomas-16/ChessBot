@@ -55,6 +55,11 @@ public static class Evaluation
     static readonly int fullyOpenKingFilePenalty = 15;
     static readonly int fullyOpenNonKingFilePenalty = 10;
 
+    
+    // Performs static evaluation of the current position.
+    // The position is assumed to be 'quiet', i.e. no captures are available that could drastically affect the evaluation.
+    // The score that's returned is given from the perspective of whoever's turn it is to move.
+    // So a positive score means the player whose turn it is to move has an advantage, while a negative score indicates a disadvantage.
     public static int Evaluate(Board board)
     {
         if (board.IsInCheckmate())
