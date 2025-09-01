@@ -67,56 +67,8 @@ public class MainBot : IChessBot
         
         moveOrdering.ResetKillers();
         moveOrdering.ResetHistory();
-        
-        // Set time limit based on timer mode
-        if (useMoveTime) {
-            // hardTimeLimit is already set correctly for movetime mode
-            
-            softTimeLimit = hardTimeLimit;
-        } else if (useTimer) {
-            int myTimeRemainingMs = timer.MillisecondsRemaining;
-            int myIncrementMs = timer.IncrementMilliseconds;
-            
-            // Get a fraction of remaining time to use for current move
-            double thinkTimeMs = myTimeRemainingMs / 40.0;
-            // Clamp think time
-            thinkTimeMs = Math.Min(5000, thinkTimeMs);
-            // Add increment
-            if (myTimeRemainingMs > myIncrementMs * 2) {
-                thinkTimeMs += myIncrementMs * 0.8;
-            }
 
-            double minThinkTime = Math.Min(50, myTimeRemainingMs * 0.25);
-            softTimeLimit = (int) Math.Ceiling(Math.Max(minThinkTime, thinkTimeMs));
-            
-            // To make sure we don't go past the allowed time
-            softTimeLimit -= (ChessChallenge.Application.Program.UCI_MODE ? uciModeTimeReducion : 0);
-
-            // Allow the bot to go a bit past the soft limit to finish the iteration
-            // Base extension: 30% of soft limit, but scale down under time pressure
-            double extensionPercent;
-            if (myTimeRemainingMs < 5000) {
-                extensionPercent = 0.1;  // 10% when very low on time
-            } else if (myTimeRemainingMs < 30000) {
-                extensionPercent = 0.2;  // 20% when moderately low
-            } else {
-                extensionPercent = 0.3;  // 30% when comfortable on time
-            }
-    
-            int extension = (int)(softTimeLimit * extensionPercent);
-    
-            // Cap extension at 500ms max and ensure minimum 25ms
-            extension = Math.Clamp(extension, 25, 500);
-    
-            // Make sure we don't exceed remaining time minus safety buffer
-            int safetyBuffer = Math.Max(50, myTimeRemainingMs / 20);
-            int maxAllowedTime = myTimeRemainingMs - safetyBuffer;
-    
-            hardTimeLimit = Math.Min(softTimeLimit + extension, maxAllowedTime);
-    
-            // Ensure hard limit is at least slightly higher than soft
-            hardTimeLimit = Math.Max(hardTimeLimit, softTimeLimit + 10);
-        }
+        SetupTimeLimits(timer);
         
         searchStopwatch = Stopwatch.StartNew();
         
@@ -631,6 +583,59 @@ public class MainBot : IChessBot
         }
         
         return aspirationDelta;
+    }
+
+    private void SetupTimeLimits(Timer timer)
+    {
+        // Set time limit based on timer mode
+        if (useMoveTime) {
+            // hardTimeLimit is already set correctly for movetime mode
+            
+            softTimeLimit = hardTimeLimit;
+        } else if (useTimer) {
+            int myTimeRemainingMs = timer.MillisecondsRemaining;
+            int myIncrementMs = timer.IncrementMilliseconds;
+            
+            // Get a fraction of remaining time to use for current move
+            double thinkTimeMs = myTimeRemainingMs / 40.0;
+            // Clamp think time
+            thinkTimeMs = Math.Min(5000, thinkTimeMs);
+            // Add increment
+            if (myTimeRemainingMs > myIncrementMs * 2) {
+                thinkTimeMs += myIncrementMs * 0.8;
+            }
+
+            double minThinkTime = Math.Min(50, myTimeRemainingMs * 0.25);
+            softTimeLimit = (int) Math.Ceiling(Math.Max(minThinkTime, thinkTimeMs));
+            
+            // To make sure we don't go past the allowed time
+            softTimeLimit -= (ChessChallenge.Application.Program.UCI_MODE ? uciModeTimeReducion : 0);
+
+            // Allow the bot to go a bit past the soft limit to finish the iteration
+            // Base extension: 30% of soft limit, but scale down under time pressure
+            double extensionPercent;
+            if (myTimeRemainingMs < 5000) {
+                extensionPercent = 0.1;  // 10% when very low on time
+            } else if (myTimeRemainingMs < 30000) {
+                extensionPercent = 0.2;  // 20% when moderately low
+            } else {
+                extensionPercent = 0.3;  // 30% when comfortable on time
+            }
+    
+            int extension = (int)(softTimeLimit * extensionPercent);
+    
+            // Cap extension at 500ms max and ensure minimum 25ms
+            extension = Math.Clamp(extension, 25, 500);
+    
+            // Make sure we don't exceed remaining time minus safety buffer
+            int safetyBuffer = Math.Max(50, myTimeRemainingMs / 20);
+            int maxAllowedTime = myTimeRemainingMs - safetyBuffer;
+    
+            hardTimeLimit = Math.Min(softTimeLimit + extension, maxAllowedTime);
+    
+            // Ensure hard limit is at least slightly higher than soft
+            hardTimeLimit = Math.Max(hardTimeLimit, softTimeLimit + 10);
+        }
     }
     
     private static string LoadBookData()
