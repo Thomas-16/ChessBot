@@ -18,6 +18,8 @@ public class MainBot : IChessBot
 
     const int maxExtensions = 13;
     
+    const int maxAspirationReSearches = 4; // Maximum re-searches at same depth
+    
     // Set hardTimeLimit to 0 to use match Timer in GUI mode
     int hardTimeLimit = 200; // ms
     int softTimeLimit;
@@ -120,6 +122,8 @@ public class MainBot : IChessBot
         
         int bestEval = 0;
         int depthSearched = 0;
+        int totalAspirationReSearches = 0; // Track total re-searches for statistics
+        int previousDepthScore = 0; // Track score stability
         
         // Iterative deepening loop
         for (int depth = 1; depth <= 256; depth++)
@@ -130,13 +134,98 @@ public class MainBot : IChessBot
                 break;
             }
             
-            int eval = Search(board, depth, -9999999, 9999999, true);
+            int alpha = -9999999;
+            int beta = 9999999;
+            
+            // Adaptive aspiration window sizing based on game phase and score stability
+            int aspirationDelta = GetAdaptiveAspirationDelta(board, depth, bestEval, previousDepthScore);
+            int originalAspirationDelta = aspirationDelta; // Store original for re-search logic
+            
+            // Use aspiration windows after depth 4 when we have a reliable score
+            if (depth > 4 && Math.Abs(bestEval) < 29000 && aspirationDelta > 0) // aspirationDelta == 0 means disabled
+            {
+                alpha = bestEval - aspirationDelta;
+                beta = bestEval + aspirationDelta;
+            }
+            
+            int eval = 0;
+            int aspirationReSearchCount = 0;
+            
+            // Aspiration window loop with gradual widening
+            while (true)
+            {
+                eval = Search(board, depth, alpha, beta, true);
+                
+                // If search was cancelled, break out
+                if (searchCanceledImmediately)
+                    break;
+                
+                // Check if we're within the aspiration window
+                if (eval > alpha && eval < beta)
+                {
+                    // Success! Score is within window
+                    break;
+                }
+                
+                // Failed outside window - need to re-search with wider bounds
+                aspirationReSearchCount++;
+                totalAspirationReSearches++;
+                
+                // Prevent infinite re-searches
+                if (aspirationReSearchCount >= maxAspirationReSearches)
+                {
+                    // Give up and search with full window
+                    alpha = -9999999;
+                    beta = 9999999;
+                    eval = Search(board, depth, alpha, beta, true);
+                    break;
+                }
+                
+                // Gradual widening based on which bound failed
+                if (eval <= alpha)
+                {
+                    // Failed low - widen alpha
+                    if (!ChessChallenge.Application.Program.UCI_MODE)
+                        Console.WriteLine($"Aspiration fail low at depth {depth}, re-search #{aspirationReSearchCount}: score {eval} <= alpha {alpha}");
+                    
+                    // Exponential widening for alpha
+                    // In endgames (detected by larger initial window), widen more aggressively to avoid excessive re-searches
+                    int wideningFactor = (originalAspirationDelta >= 100) ? 3 : 2; // More aggressive in endgames
+                    aspirationDelta = aspirationDelta * wideningFactor;
+                    alpha = Math.Max(-9999999, bestEval - aspirationDelta);
+                    
+                    // After multiple failures, open the window completely on the failing side
+                    if (aspirationReSearchCount >= 3 || aspirationDelta > 500)
+                        alpha = -9999999;
+                }
+                else if (eval >= beta)
+                {
+                    // Failed high - widen beta
+                    if (!ChessChallenge.Application.Program.UCI_MODE)
+                        Console.WriteLine($"Aspiration fail high at depth {depth}, re-search #{aspirationReSearchCount}: score {eval} >= beta {beta}");
+                    
+                    // Exponential widening for beta
+                    // In endgames (detected by larger initial window), widen more aggressively to avoid excessive re-searches
+                    int wideningFactor = (originalAspirationDelta >= 100) ? 3 : 2; // More aggressive in endgames
+                    aspirationDelta = aspirationDelta * wideningFactor;
+                    beta = Math.Min(9999999, bestEval + aspirationDelta);
+                    
+                    // After multiple failures, open the window completely on the failing side
+                    if (aspirationReSearchCount >= 3 || aspirationDelta > 500)
+                        beta = 9999999;
+                }
+                
+                // Reset best move for re-search
+                bestMoveThisIteration = Move.NullMove;
+            }
+            
             depthSearched++;
             
             // Iteration fully completed
             if (!searchCanceledImmediately)
             {
                 bestMove = bestMoveThisIteration;
+                previousDepthScore = bestEval; // Store for score stability tracking
                 bestEval = eval;
                 
                 bestMoveThisIteration = Move.NullMove;
@@ -170,8 +259,12 @@ public class MainBot : IChessBot
         
         searchStopwatch.Stop();
         if(!ChessChallenge.Application.Program.UCI_MODE)
+        {
             Console.WriteLine($"Depth searched: {depthSearched}, Final move: {bestMove.ToString()}, Time took: {searchStopwatch.ElapsedMilliseconds}ms, " +
                         $"Positions evaluated: {positionsEvaluated}, Score: {bestEval}");
+            if (totalAspirationReSearches > 0)
+                Console.WriteLine($"Aspiration window re-searches: {totalAspirationReSearches}");
+        }
 
         if (bestMove == Move.NullMove)
         {
@@ -197,6 +290,10 @@ public class MainBot : IChessBot
     
     int Search(Board board, int depth, int alpha, int beta, bool isRoot, int numExtensions = 0, int ply = 0)
     {
+        // Note: This implementation uses fail-hard alpha-beta (returns exact bounds)
+        // Aspiration windows still work with fail-hard, we just re-search when
+        // the score equals a bound rather than only when it exceeds it
+        
         // Check time limit periodically (not every node to avoid overhead)
         if (positionsEvaluated % 1000 == 0)
         {
@@ -455,6 +552,85 @@ public class MainBot : IChessBot
         }
         
         return alpha;
+    }
+    
+    private int GetAdaptiveAspirationDelta(Board board, int depth, int currentScore, int previousScore)
+    {
+        // Count each piece type using bitboard operations
+        ulong queens = board.GetPieceBitboard(PieceType.Queen, true) | board.GetPieceBitboard(PieceType.Queen, false);
+        ulong rooks = board.GetPieceBitboard(PieceType.Rook, true) | board.GetPieceBitboard(PieceType.Rook, false);
+        ulong bishops = board.GetPieceBitboard(PieceType.Bishop, true) | board.GetPieceBitboard(PieceType.Bishop, false);
+        ulong knights = board.GetPieceBitboard(PieceType.Knight, true) | board.GetPieceBitboard(PieceType.Knight, false);
+    
+        // Use BitboardHelper to count bits (population count)
+        int queenCount = BitboardHelper.GetNumberOfSetBits(queens);
+        int rookCount = BitboardHelper.GetNumberOfSetBits(rooks);
+        int bishopCount = BitboardHelper.GetNumberOfSetBits(bishops);
+        int knightCount = BitboardHelper.GetNumberOfSetBits(knights);
+    
+        int minorPieces = bishopCount + knightCount;
+        int totalMaterial = queenCount * 900 + rookCount * 500 + minorPieces * 300;
+        
+        // Determine game phase
+        bool isEndgame = totalMaterial < 2600; // Roughly equivalent to 2 rooks + 2 minors per side
+        bool isLateEndgame = totalMaterial < 1300; // Very few pieces left
+        bool isPawnEndgame = queens == 0 && rooks == 0 && minorPieces <= 2;
+        
+        // Calculate score volatility (how much the score changed from last iteration)
+        int scoreVolatility = 0;
+        if (depth > 5 && previousScore != 0)
+        {
+            scoreVolatility = Math.Abs(currentScore - previousScore);
+        }
+        
+        // Determine aspiration window size
+        int aspirationDelta;
+        
+        if (isPawnEndgame || isLateEndgame)
+        {
+            // Very wide window or disable aspiration in pure pawn/late endgames
+            // These positions are extremely volatile (passed pawns, promotion tactics)
+            if (totalMaterial < 1000)
+            {
+                // Disable aspiration windows in very late endgames
+                aspirationDelta = 0; // 0 means disabled
+            }
+            else
+            {
+                aspirationDelta = 200; // Very wide window (2 pawns)
+            }
+        }
+        else if (isEndgame)
+        {
+            // Wider window in endgames
+            aspirationDelta = 120; // 1 pawn
+            
+            // Further adjust based on score volatility
+            if (scoreVolatility > 150)
+            {
+                aspirationDelta = 150; // Even wider if scores are jumping around
+            }
+        }
+        else
+        {
+            // Opening/Middlegame - use tighter windows
+            aspirationDelta = 50;
+            
+            // Slightly widen if we're seeing volatility even in middlegame
+            if (scoreVolatility > 100)
+            {
+                aspirationDelta = 85;
+            }
+        }
+        
+        // Special case: if we're close to mate scores, use wider windows
+        // as tactics become more critical
+        if (Math.Abs(currentScore) > 1000) // Getting close to mate territory
+        {
+            aspirationDelta = Math.Max(aspirationDelta, 150);
+        }
+        
+        return aspirationDelta;
     }
     
     private static string LoadBookData()
