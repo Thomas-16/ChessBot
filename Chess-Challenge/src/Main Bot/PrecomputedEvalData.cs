@@ -164,9 +164,14 @@ public static class PrecomputedEvalData
         {
             CreatePawnShieldSquare(squareIndex);
         }
+        
+        OrthogonalDistance = new int[64, 64];
+        CentreManhattanDistance = new int[64];
+
+        InitializeDistances();
     }
 
-    static void CreatePawnShieldSquare(int squareIndex)
+    private static void CreatePawnShieldSquare(int squareIndex)
     {
         List<int> shieldIndicesWhite = new();
         List<int> shieldIndicesBlack = new();
@@ -194,6 +199,29 @@ public static class PrecomputedEvalData
             if (square.File >= 0 && square.File < 8 && square.Rank >= 0 && square.Rank < 8)
             {
                 list.Add(square.Index);
+            }
+        }
+    }
+    
+    
+    public static int[,] OrthogonalDistance;
+    public static int[] CentreManhattanDistance;
+
+    private static void InitializeDistances()
+    {
+        for (int squareA = 0; squareA < 64; squareA++)
+        {
+            Square coordA = new Square(squareA);
+            int fileDstFromCentre = Math.Max(3 - coordA.File, coordA.File - 4);
+            int rankDstFromCentre = Math.Max(3 - coordA.Rank, coordA.Rank - 4);
+            CentreManhattanDistance[squareA] = fileDstFromCentre + rankDstFromCentre;
+
+            for (int squareB = 0; squareB < 64; squareB++)
+            {
+                Square coordB = new Square(squareB);
+                int rankDistance = Math.Abs(coordA.Rank - coordB.Rank);
+                int fileDistance = Math.Abs(coordA.File - coordB.File);
+                OrthogonalDistance[squareA, squareB] = fileDistance + rankDistance;
             }
         }
     }

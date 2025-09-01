@@ -4,17 +4,7 @@ using System;
 public static class Evaluation
 {
     public static readonly int[] PieceValues = { 0, 100, 320, 330, 500, 900, 0 };
-    
-    static readonly int[] DistanceFromCenterTable = {
-        3, 3, 3, 3, 3, 3, 3, 3,
-        3, 2, 2, 2, 2, 2, 2, 3,
-        3, 2, 1, 1, 1, 1, 2, 3,
-        3, 2, 1, 0, 0, 1, 2, 3,
-        3, 2, 1, 0, 0, 1, 2, 3,
-        3, 2, 1, 1, 1, 1, 2, 3,
-        3, 2, 2, 2, 2, 2, 2, 3,
-        3, 3, 3, 3, 3, 3, 3, 3
-    };
+
     static readonly ulong centerSquares = ((ulong)1 << new Square("e4").Index)
                           | ((ulong)1 << new Square("d4").Index)
                           | ((ulong)1 << new Square("e5").Index)
@@ -54,6 +44,8 @@ public static class Evaluation
     static readonly int semiOpenNonKingFilePenalty = 15;
     static readonly int fullyOpenKingFilePenalty = 15;
     static readonly int fullyOpenNonKingFilePenalty = 10;
+    static readonly int mopUpKingDistanceMultiplier = 6;
+    static readonly int mopUpOpponentKingDistanceToCenterMultiplier = 10;
 
     
     // Performs static evaluation of the current position.
@@ -122,12 +114,17 @@ public static class Evaluation
         Square whiteKingSquare = board.GetKingSquare(true);
         Square blackKingSquare = board.GetKingSquare(false);
         
-        int whiteKingValue = GetPieceSquareValue(PieceType.King, GetSquareIndex(whiteKingSquare, true), openingWeight, endGameWeight);
-        int blackKingValue = GetPieceSquareValue(PieceType.King, GetSquareIndex(blackKingSquare, false), openingWeight, endGameWeight);
+        int whiteKingValue = GetPieceSquareValue(PieceType.King, GetSquareIndexSided(whiteKingSquare, true), openingWeight, endGameWeight);
+        int blackKingValue = GetPieceSquareValue(PieceType.King, GetSquareIndexSided(blackKingSquare, false), openingWeight, endGameWeight);
         evaluation += whiteKingValue - blackKingValue;
 
         ulong whitePiecesWithoutKing = board.WhitePiecesBitboard & ~board.GetPieceBitboard(PieceType.King, true);
         ulong blackPiecesWithoutKing = board.BlackPiecesBitboard & ~board.GetPieceBitboard(PieceType.King, false);
+        
+        // Mop-up eval for endgame
+        int whiteMopUpEval = EvaluateMopUp(whiteMaterialEval, blackMaterialEval, whiteKingSquare, blackKingSquare, endGameWeight);
+        int blackMopUpEval = EvaluateMopUp(blackMaterialEval, whiteMaterialEval, blackKingSquare, whiteKingSquare, endGameWeight);
+        evaluation += whiteMopUpEval - blackMopUpEval;
 
         // Center control
         int whiteCenterControl = BitboardHelper.GetNumberOfSetBits((whitePiecesWithoutKing & ~whitePawns) & centerSquares) * pieceCenterControlScore
@@ -152,8 +149,6 @@ public static class Evaluation
         int blackKingSafetyEval = EvaluateKingSafety(false, blackKingSquare.Index, blackPawns, whitePawns, whitePieceSquareTableEval, whiteNumRooks, whiteNumQueens, openingWeight);
         evaluation += whiteKingSafetyEval - blackKingSafetyEval;
         
-        // Mop-up evaluation for endgame
-        evaluation += EvaluateMopUp(whiteKingSquare, blackKingSquare, evaluation, endGameWeight);
         
         return board.IsWhiteToMove ? evaluation : -evaluation;
     }
@@ -174,7 +169,7 @@ public static class Evaluation
         while (piecesCopy != 0)
         {
             int squareIndex = BitboardHelper.ClearAndGetIndexOfLSB(ref piecesCopy);
-            int adjustedSquareIndex = GetSquareIndex(squareIndex, isWhite);
+            int adjustedSquareIndex = GetSquareIndexSided(squareIndex, isWhite);
             
             // Get piece-square value with game phase blending
             int pieceSquareValue = GetPieceSquareValue(pieceType, adjustedSquareIndex, openingWeight, endGameWeight);
@@ -335,7 +330,7 @@ public static class Evaluation
         return Math.Max(0, Math.Min(256, phase)) / 256f;
     }
     
-    public static int GetSquareIndex(Square square, bool isWhite)
+    public static int GetSquareIndexSided(Square square, bool isWhite)
     {
         // For white, use normal index (a1=0, h8=63)
         // For black, flip the board vertically (a8=0, h1=63)
@@ -353,7 +348,7 @@ public static class Evaluation
         return index;
     }
     
-    public static int GetSquareIndex(int squareIndex, bool isWhite)
+    public static int GetSquareIndexSided(int squareIndex, bool isWhite)
     {
         if (!isWhite)
         {
@@ -406,31 +401,23 @@ public static class Evaluation
         return (int)(openingValue * openingWeight + endgameValue * endGameWeight);
     }
 
-    private static int EvaluateMopUp(Square whiteKingSquare, Square blackKingSquare, int evaluation, float endGameWeight)
+    private static int EvaluateMopUp(int myMaterial, int enemyMaterial, Square selfKingSquare, Square enemyKingSquare, float endGameWeight)
     {
-        if (endGameWeight <= 0.1f)
-            return 0;
-        
-        int whiteKingFile = whiteKingSquare.File;
-        int whiteKingRank = whiteKingSquare.Rank;
-        int blackKingFile = blackKingSquare.File;
-        int blackKingRank = blackKingSquare.Rank;
-        
-        int kingDistance = Math.Abs(whiteKingFile - blackKingFile) + Math.Abs(whiteKingRank - blackKingRank);
-        
-        if (evaluation > 200)
+        if (myMaterial > enemyMaterial + PieceValues[(int)PieceType.Pawn] * 2 && endGameWeight > 0)
         {
-            int blackKingToEdge = DistanceFromCenterTable[blackKingSquare.Index];
-            int mopUpScore = blackKingToEdge * 20 + (7 - kingDistance) * 10;
+            int mopUpScore = 0;
+
+            int friendlyKingSquare = selfKingSquare.Index;
+            int opponentKingSquare = enemyKingSquare.Index;
+            
+            // Encourage moving king closer to opponent king
+            mopUpScore += (14 - PrecomputedEvalData.OrthogonalDistance[friendlyKingSquare, opponentKingSquare]) * mopUpKingDistanceMultiplier;
+            
+            // Encourage pushing opponent king to edge of board
+            mopUpScore += PrecomputedEvalData.CentreManhattanDistance[opponentKingSquare] * mopUpOpponentKingDistanceToCenterMultiplier;
             return (int)(mopUpScore * endGameWeight);
         }
-        if (evaluation < -200)
-        {
-            int whiteKingToEdge = DistanceFromCenterTable[whiteKingSquare.Index];
-            int mopUpScore = whiteKingToEdge * 20 + (7 - kingDistance) * 10;
-            return -(int)(mopUpScore * endGameWeight);
-        }
-        
+
         return 0;
     }
     
