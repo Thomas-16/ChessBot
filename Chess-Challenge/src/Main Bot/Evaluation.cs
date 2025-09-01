@@ -46,6 +46,14 @@ public static class Evaluation
     static readonly int[] passedPawnBonuses = { 0, 120, 80, 50, 30, 15, 15 }; // bonus given to a passed pawn based on how close it is to promoting
     static readonly int[] isolatedPawnPenaltyByCount = { 0, -10, -25, -50, -75, -75, -75, -75, -75 };
     static readonly int[] kingPawnShieldScores = { 4, 7, 4, 3, 6, 3 };
+    
+    static readonly int pawnCenterControlScore = 12;
+    static readonly int pieceCenterControlScore = 10;
+    static readonly int maxUnCastledKingPenalty = 50;
+    static readonly int semiOpenKingFilePenalty = 25;
+    static readonly int semiOpenNonKingFilePenalty = 15;
+    static readonly int fullyOpenKingFilePenalty = 15;
+    static readonly int fullyOpenNonKingFilePenalty = 10;
 
     public static int Evaluate(Board board)
     {
@@ -117,8 +125,6 @@ public static class Evaluation
         ulong blackPiecesWithoutKing = board.BlackPiecesBitboard & ~board.GetPieceBitboard(PieceType.King, false);
 
         // Center control
-        int pawnCenterControlScore = 12;
-        int pieceCenterControlScore = 10;
         int whiteCenterControl = BitboardHelper.GetNumberOfSetBits((whitePiecesWithoutKing & ~whitePawns) & centerSquares) * pieceCenterControlScore
                                  + BitboardHelper.GetNumberOfSetBits(whitePawns & centerSquares) * pawnCenterControlScore;
         int blackCenterControl = BitboardHelper.GetNumberOfSetBits((blackPiecesWithoutKing & ~blackPawns) & centerSquares) * pieceCenterControlScore
@@ -243,7 +249,7 @@ public static class Evaluation
             // Scales penalty from 0-50 based on how developed the opponent's pieces are
             // Logic: an uncastled king is more vulnerable when the opponent has active pieces
             float enemyDevelopmentScore = Math.Clamp((enemyPieceSquareScore + 10) / 130f, 0, 1);
-            uncastledKingPenalty = (int) (50 * enemyDevelopmentScore);
+            uncastledKingPenalty = (int) (maxUnCastledKingPenalty * enemyDevelopmentScore);
         }
         
         // Evaluate open file attacks
@@ -263,12 +269,12 @@ public static class Evaluation
                 // Semi-open file - no enemy pawns
                 if ((enemyPawns & fileMask) == 0)
                 {
-                    openFileAgainstKingPenalty += isKingFile ? 25 : 15;
+                    openFileAgainstKingPenalty += isKingFile ? semiOpenKingFilePenalty : semiOpenNonKingFilePenalty;
                     
                     // Fully open file - no pawns at all
                     if ((ownPawns & fileMask) == 0)
                     {
-                        openFileAgainstKingPenalty += isKingFile ? 15 : 10;
+                        openFileAgainstKingPenalty += isKingFile ? fullyOpenKingFilePenalty : fullyOpenNonKingFilePenalty;
                     }
                 }
 
