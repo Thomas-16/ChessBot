@@ -125,6 +125,20 @@ public class MoveOrdering
         history = new int[2, 64, 64];
     }
 
+    public void DecayHistory()
+    {
+        for (int color = 0; color < 2; color++)
+        {
+            for (int from = 0; from < 64; from++)
+            {
+                for (int to = 0; to < 64; to++)
+                {
+                    history[color, from, to] /= 8;
+                }
+            }
+        }
+    }
+
     int GetPieceValue(PieceType pieceType)
     {
         return Evaluation.PieceValues[(int)pieceType];

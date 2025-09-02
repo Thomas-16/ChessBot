@@ -66,7 +66,7 @@ public class MainBot : IChessBot
             moveOrdering = new MoveOrdering();
         
         moveOrdering.ResetKillers();
-        moveOrdering.ResetHistory();
+        moveOrdering.DecayHistory();
 
         SetupTimeLimits(timer);
         
