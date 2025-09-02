@@ -57,7 +57,7 @@ public static class Evaluation
         if (board.IsInCheckmate())
         {
             // Return from the perspective of the side to move
-            return -30000;  // Being checkmated is bad
+            return -MainBot.immediateMateScore;  // Being checkmated is bad
         }
         
         if (board.IsDraw())

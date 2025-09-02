@@ -16,6 +16,8 @@ public class MainBot : IChessBot
     
     Stopwatch searchStopwatch;
 
+    public const int immediateMateScore = 30000;
+
     const int maxExtensions = 13;
     
     const int maxAspirationReSearches = 4; // Maximum re-searches at same depth
@@ -180,6 +182,9 @@ public class MainBot : IChessBot
                 previousDepthScore = bestEval; // Store for score stability tracking
                 bestEval = eval;
                 
+                // Output UCI info for completed depth
+                OutputUCIInfo(depth, eval, bestMoveThisIteration, searchStopwatch.ElapsedMilliseconds, positionsEvaluated);
+                
                 bestMoveThisIteration = Move.NullMove;
                 
                 // Stop if we found a winning checkmate for us
@@ -279,7 +284,7 @@ public class MainBot : IChessBot
         {
             positionsEvaluated++;
             // Current player is checkmated - this is bad for them
-            return -30000 + depth;  // Add depth to prefer shorter mates
+            return -immediateMateScore + depth;  // Add depth to prefer shorter mates
         }
         
         if (board.IsDraw())
@@ -427,7 +432,7 @@ public class MainBot : IChessBot
         if (board.IsInCheckmate())
         {
             // Current player is checkmated - return negative
-            return -30000;
+            return -immediateMateScore;
         }
         
         if (board.IsDraw())
@@ -636,6 +641,34 @@ public class MainBot : IChessBot
             // Ensure hard limit is at least slightly higher than soft
             hardTimeLimit = Math.Max(hardTimeLimit, softTimeLimit + 10);
         }
+    }
+    
+    private void OutputUCIInfo(int depth, int score, Move bestMove, long timeMs, int nodes)
+    {
+        if (!ChessChallenge.Application.Program.UCI_MODE) return;
+        
+        // Calculate nodes per second
+        long nps = timeMs > 0 ? (nodes * 1000) / timeMs : 0;
+        
+        // Convert score to centipawns for UCI
+        int centipawnScore = score;
+        
+        // Handle mate scores
+        string scoreString;
+        if (Math.Abs(score) > 29000)
+        {
+            int mateDistance = (immediateMateScore - Math.Abs(score));
+            if (score > 0)
+                scoreString = $"mate {mateDistance}";
+            else
+                scoreString = $"mate -{mateDistance}";
+        }
+        else
+        {
+            scoreString = $"cp {centipawnScore}";
+        }
+        
+        Console.WriteLine($"info depth {depth} score {scoreString} time {timeMs} nodes {nodes} nps {nps} pv {bestMove}");
     }
     
     private static string LoadBookData()
