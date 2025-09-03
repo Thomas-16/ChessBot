@@ -245,7 +245,7 @@ public class MainBot : IChessBot
         useTimer = true;
     }
     
-    int Search(Board board, int depth, int alpha, int beta, bool isRoot, int numExtensions = 0, int ply = 0)
+    int Search(Board board, int depth, int alpha, int beta, bool isRoot, int numExtensions = 0, int ply = 0, bool nullMoveAllowed = true)
     {
         // Note: This implementation uses fail-hard alpha-beta (returns exact bounds)
         // Aspiration windows still work with fail-hard, we just re-search when
@@ -298,6 +298,33 @@ public class MainBot : IChessBot
             return QuiescenceSearch(board, alpha, beta);
         }
         
+        // Null Move Pruning
+        if (!isRoot && nullMoveAllowed && depth >= 3 && !board.IsInCheck() &&
+            beta > -29000 && // Don't null move when opponent has a forced mate
+            !IsPawnEndgame(board)) // Avoid null move in pawn endgames due to zugzwang
+        {
+            // Make null move
+            board.ForceSkipTurn();
+            
+            // Adaptive reduction based on depth
+            int R = 2;
+            if (depth >= 5) R = 3;
+            if (depth >= 12) R = 6;
+            
+            // Search with reduced depth and null window
+            // We search with -beta, -beta+1 (null window) since we only care if it fails high
+            int nullScore = -Search(board, depth - R - 1, -beta, -beta + 1, false, numExtensions, ply + 1, false);
+            
+            // Undo null move
+            board.UndoSkipTurn();
+            
+            // If null move failed high (opponent couldn't punish our pass), we can prune
+            if (nullScore >= beta && Math.Abs(nullScore) < 29000) // Don't trust mate scores from reduced search
+            {
+                return beta; // Null move cutoff
+            }
+        }
+        
         Span<Move> movesSpan = stackalloc Move[218];
         board.GetLegalMovesNonAlloc(ref movesSpan);
         moveOrdering.OrderMoves(board, ref movesSpan, false, ply, ttMove);
@@ -347,6 +374,7 @@ public class MainBot : IChessBot
                 }
                 
                 // Null window search (also called scout search)
+                // Note: nullMoveAllowed = true for normal moves
                 score = -Search(board, newDepth - reduction, -alpha - 1, -alpha, false, numExtensions + extension, ply + 1);
                 
                 // If the move appears to be better than alpha (and no reduction was applied OR score > alpha despite reduction)
@@ -589,6 +617,14 @@ public class MainBot : IChessBot
         
         return aspirationDelta;
     }
+    
+    private bool IsPawnEndgame(Board board)
+    {
+        ulong pawns = board.GetPieceBitboard(PieceType.Pawn, true) | board.GetPieceBitboard(PieceType.Pawn, false);
+        return BitboardHelper.GetNumberOfSetBits(board.AllPiecesBitboard) ==
+               BitboardHelper.GetNumberOfSetBits(pawns) + 2;
+    }
+
 
     private void SetupTimeLimits(Timer timer)
     {
