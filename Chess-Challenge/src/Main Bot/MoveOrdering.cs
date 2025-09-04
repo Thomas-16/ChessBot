@@ -25,7 +25,7 @@ public class MoveOrdering
         history = new int[2, 64, 64];
     }
     
-    public void OrderMoves(Board board, ref Span<Move> moves, bool inQSearch, int ply = 0, Move hashMove = default)
+    public void OrderMoves(Board board, Span<Move> moves, bool inQSearch, int ply = 0, Move hashMove = default)
     {
         ulong oppAttacks = board.GetOpponentAttackMap();
         

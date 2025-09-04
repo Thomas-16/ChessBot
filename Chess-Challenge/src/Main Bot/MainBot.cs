@@ -327,7 +327,7 @@ public class MainBot : IChessBot
         
         Span<Move> movesSpan = stackalloc Move[218];
         board.GetLegalMovesNonAlloc(ref movesSpan);
-        moveOrdering.OrderMoves(board, ref movesSpan, false, ply, ttMove);
+        moveOrdering.OrderMoves(board, movesSpan, false, ply, ttMove);
         
         Move bestMoveThisPosition = Move.NullMove;
         int bestScore = int.MinValue;
@@ -493,7 +493,7 @@ public class MainBot : IChessBot
         
         Span<Move> capturesSpan = stackalloc Move[218];
         board.GetLegalMovesNonAlloc(ref capturesSpan, true);
-        moveOrdering.OrderMoves(board, ref capturesSpan, true);
+        moveOrdering.OrderMoves(board, capturesSpan, true);
         
         foreach (Move capture in capturesSpan)
         {
