@@ -559,7 +559,7 @@ public class MainBot : IChessBot
         // Determine game phase
         bool isEndgame = totalMaterial < 2600; // Roughly equivalent to 2 rooks + 2 minors per side
         bool isLateEndgame = totalMaterial < 1300; // Very few pieces left
-        bool isPawnEndgame = queens == 0 && rooks == 0 && minorPieces <= 2;
+        bool isPawnEndgame = queens == 0 && rooks == 0 && minorPieces <= 1;
         
         // Calculate score volatility (how much the score changed from last iteration)
         int scoreVolatility = 0;
