@@ -575,7 +575,7 @@ public class MainBot : IChessBot
         {
             // Very wide window or disable aspiration in pure pawn/late endgames
             // These positions are extremely volatile (passed pawns, promotion tactics)
-            if (totalMaterial < 1000)
+            if (totalMaterial < 1000 || IsPawnEndgame(board))
             {
                 // Disable aspiration windows in very late endgames
                 aspirationDelta = 0; // 0 means disabled
