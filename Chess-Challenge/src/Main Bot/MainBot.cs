@@ -139,8 +139,8 @@ public class MainBot : IChessBot
                 if (eval <= alpha)
                 {
                     // Failed low - widen alpha
-                    if (!ChessChallenge.Application.Program.UCI_MODE)
-                        Console.WriteLine($"Aspiration fail low at depth {depth}, re-search #{aspirationReSearchCount}: score {eval} <= alpha {alpha}");
+                    // if (!ChessChallenge.Application.Program.UCI_MODE)
+                    //     Console.WriteLine($"Aspiration fail low at depth {depth}, re-search #{aspirationReSearchCount}: score {eval} <= alpha {alpha}");
                     
                     // Exponential widening for alpha
                     // In endgames (detected by larger initial window), widen more aggressively to avoid excessive re-searches
