@@ -4,6 +4,7 @@ using System;
 public static class Evaluation
 {
     public static readonly int[] PieceValues = { 0, 100, 320, 330, 500, 900, 0 };
+    public static readonly int[] PieceValuesEndGame = { 0, 115, 305, 340, 510, 950, 0 };
 
     static readonly ulong centerSquares = ((ulong)1 << new Square("e4").Index)
                           | ((ulong)1 << new Square("d4").Index)
@@ -85,16 +86,16 @@ public static class Evaluation
         ulong blackQueens = board.GetPieceBitboard(PieceType.Queen, false);
         
         // Evaluate material
-        int whiteMaterialEval = EvaluateMaterial(whitePawns, PieceType.Pawn) +
-                                EvaluateMaterial(whiteKnights, PieceType.Knight) +
-                                EvaluateMaterial(whiteBishops, PieceType.Bishop) +
-                                EvaluateMaterial(whiteRooks, PieceType.Rook) +
-                                EvaluateMaterial(whiteQueens, PieceType.Queen);
-        int blackMaterialEval = EvaluateMaterial(blackPawns, PieceType.Pawn) +
-                                EvaluateMaterial(blackKnights, PieceType.Knight) +
-                                EvaluateMaterial(blackBishops, PieceType.Bishop) +
-                                EvaluateMaterial(blackRooks, PieceType.Rook) +
-                                EvaluateMaterial(blackQueens, PieceType.Queen);
+        int whiteMaterialEval = EvaluateMaterial(whitePawns, PieceType.Pawn, openingWeight, endGameWeight) +
+                                EvaluateMaterial(whiteKnights, PieceType.Knight, openingWeight, endGameWeight) +
+                                EvaluateMaterial(whiteBishops, PieceType.Bishop, openingWeight, endGameWeight) +
+                                EvaluateMaterial(whiteRooks, PieceType.Rook, openingWeight, endGameWeight) +
+                                EvaluateMaterial(whiteQueens, PieceType.Queen, openingWeight, endGameWeight);
+        int blackMaterialEval = EvaluateMaterial(blackPawns, PieceType.Pawn, openingWeight, endGameWeight) +
+                                EvaluateMaterial(blackKnights, PieceType.Knight, openingWeight, endGameWeight) +
+                                EvaluateMaterial(blackBishops, PieceType.Bishop, openingWeight, endGameWeight) +
+                                EvaluateMaterial(blackRooks, PieceType.Rook, openingWeight, endGameWeight) +
+                                EvaluateMaterial(blackQueens, PieceType.Queen, openingWeight, endGameWeight);
         evaluation += whiteMaterialEval - blackMaterialEval;
         
         // Evaluate piece square table
@@ -153,12 +154,17 @@ public static class Evaluation
         return board.IsWhiteToMove ? evaluation : -evaluation;
     }
 
-    private static int EvaluateMaterial(ulong pieces, PieceType pieceType)
+    private static int EvaluateMaterial(ulong pieces, PieceType pieceType, float openingWeight, float endGameWeight)
     {
-        int pieceValue = PieceValues[(int)pieceType];
-        
+        // Get piece values for both game phases
+        int pieceValueOpening = PieceValues[(int)pieceType];
+        int pieceValueEndgame = PieceValuesEndGame[(int)pieceType];
+    
+        // Blend the piece value based on game phase
+        int blendedPieceValue = (int)(pieceValueOpening * openingWeight + pieceValueEndgame * endGameWeight);
+    
         int pieceCount = BitboardHelper.GetNumberOfSetBits(pieces);
-        return pieceValue * pieceCount;
+        return blendedPieceValue * pieceCount;
     }
 
     private static int EvaluatePieceSquareTable(ulong pieces, bool isWhite, PieceType pieceType, float openingWeight, float endGameWeight)
@@ -375,19 +381,19 @@ public static class Evaluation
                 break;
             case PieceType.Knight:
                 openingValue = PieceSquareTable.Knights[squareIndex];
-                endgameValue = PieceSquareTable.Knights[squareIndex]; // Same for all phases
+                endgameValue = PieceSquareTable.KnightsEnd[squareIndex];
                 break;
             case PieceType.Bishop:
                 openingValue = PieceSquareTable.Bishops[squareIndex];
-                endgameValue = PieceSquareTable.Bishops[squareIndex]; // Same for all phases
+                endgameValue = PieceSquareTable.BishopsEnd[squareIndex];
                 break;
             case PieceType.Rook:
                 openingValue = PieceSquareTable.Rooks[squareIndex];
-                endgameValue = PieceSquareTable.Rooks[squareIndex]; // Same for all phases
+                endgameValue = PieceSquareTable.RooksEnd[squareIndex];
                 break;
             case PieceType.Queen:
                 openingValue = PieceSquareTable.Queens[squareIndex];
-                endgameValue = PieceSquareTable.Queens[squareIndex]; // Same for all phases
+                endgameValue = PieceSquareTable.QueensEnd[squareIndex];
                 break;
             case PieceType.King:
                 openingValue = PieceSquareTable.KingStart[squareIndex];
