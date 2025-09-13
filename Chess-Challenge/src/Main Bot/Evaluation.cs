@@ -38,6 +38,13 @@ public static class Evaluation
     static readonly int[] isolatedPawnPenaltyByCount = { 0, -10, -25, -50, -75, -75, -75, -75, -75 };
     static readonly int[] kingPawnShieldScores = { 4, 7, 4, 3, 6, 3 };
     
+    // Mobility weights for different pieces (applied to sqrt of move count)
+    static readonly int[] mobilityWeights = { 0, 0, 8, 5, 3, 2, 0 };
+    static readonly int[] mobilityWeightsEndGame = { 0, 0, 6, 4, 2, 1, 0 };
+
+    // Minimum expected mobility for each piece type (used for relative scoring)
+    static readonly int[] minExpectedMobility = { 0, 0, 3, 5, 5, 5, 0 }; // Knight, Bishop, Rook, Queen baseline
+    
     static readonly int pawnCenterControlScore = 12;
     static readonly int pieceCenterControlScore = 10;
     static readonly int maxUnCastledKingPenalty = 50;
@@ -149,6 +156,22 @@ public static class Evaluation
         int whiteKingSafetyEval = EvaluateKingSafety(true, whiteKingSquare.Index, whitePawns, blackPawns, blackPieceSquareTableEval, blackNumRooks, blackNumQueens, openingWeight);
         int blackKingSafetyEval = EvaluateKingSafety(false, blackKingSquare.Index, blackPawns, whitePawns, whitePieceSquareTableEval, whiteNumRooks, whiteNumQueens, openingWeight);
         evaluation += whiteKingSafetyEval - blackKingSafetyEval;
+        
+        // Mobility
+        int whiteMobilityScore = 0;
+        int blackMobilityScore = 0;
+        
+        whiteMobilityScore += EvaluatePieceMobility(board, PieceType.Knight, true, openingWeight, endGameWeight);
+        whiteMobilityScore += EvaluatePieceMobility(board, PieceType.Bishop, true, openingWeight, endGameWeight);
+        whiteMobilityScore += EvaluatePieceMobility(board, PieceType.Rook, true, openingWeight, endGameWeight);
+        whiteMobilityScore += EvaluatePieceMobility(board, PieceType.Queen, true, openingWeight, endGameWeight);
+    
+        blackMobilityScore += EvaluatePieceMobility(board, PieceType.Knight, false, openingWeight, endGameWeight);
+        blackMobilityScore += EvaluatePieceMobility(board, PieceType.Bishop, false, openingWeight, endGameWeight);
+        blackMobilityScore += EvaluatePieceMobility(board, PieceType.Rook, false, openingWeight, endGameWeight);
+        blackMobilityScore += EvaluatePieceMobility(board, PieceType.Queen, false, openingWeight, endGameWeight);
+        
+        evaluation += whiteMobilityScore - blackMobilityScore;
         
         
         return board.IsWhiteToMove ? evaluation : -evaluation;
@@ -295,6 +318,69 @@ public static class Evaluation
         }
 
         return (int)((-penalty - uncastledKingPenalty - openFileAgainstKingPenalty) * openingWeight * enemyQueenMultiplier);
+    }
+    
+    private static int EvaluatePieceMobility(Board board, PieceType pieceType, bool isWhite, float openingWeight, float endGameWeight)
+    {
+        if (pieceType == PieceType.Pawn || pieceType == PieceType.King)
+            return 0; // No mobility evaluation for pawns and kings
+    
+        int totalMobility = 0;
+        PieceList pieces = board.GetPieceList(pieceType, isWhite);
+    
+        foreach (Piece piece in pieces)
+        {
+            // Get pseudo-legal moves for this piece (faster than legal moves)
+            // We'll count attacked squares, including those occupied by own pieces (controlled squares)
+            ulong attacks = GetPieceAttacks(board, piece.Square, pieceType, isWhite);
+            int moveCount = BitboardHelper.GetNumberOfSetBits(attacks);
+        
+            // Subtract baseline expected mobility and apply square root
+            int relativeMobility = moveCount - minExpectedMobility[(int)pieceType];
+            float sqrtMobility = relativeMobility > 0 ? (float)Math.Sqrt(relativeMobility) : -(float)Math.Sqrt(-relativeMobility);
+        
+            // Get the appropriate weight based on game phase
+            float weight = mobilityWeights[(int)pieceType] * openingWeight + 
+                           mobilityWeightsEndGame[(int)pieceType] * endGameWeight;
+        
+            totalMobility += (int)(sqrtMobility * weight);
+        }
+    
+        return totalMobility;
+    }
+    private static ulong GetPieceAttacks(Board board, Square square, PieceType pieceType, bool isWhite)
+    {
+        ulong attacks = 0;
+    
+        switch (pieceType)
+        {
+            case PieceType.Knight:
+                // Knight moves are always the same regardless of blocking
+                attacks = BitboardHelper.GetKnightAttacks(square);
+                break;
+            
+            case PieceType.Bishop:
+                // Get sliding attacks for bishop
+                attacks = BitboardHelper.GetSliderAttacks(pieceType, square, board);
+                break;
+            
+            case PieceType.Rook:
+                // Get sliding attacks for rook
+                attacks = BitboardHelper.GetSliderAttacks(pieceType, square, board);
+                break;
+            
+            case PieceType.Queen:
+                // Queen moves like both rook and bishop
+                attacks = BitboardHelper.GetSliderAttacks(PieceType.Rook, square, board) |
+                          BitboardHelper.GetSliderAttacks(PieceType.Bishop, square, board);
+                break;
+        }
+    
+        // Exclude squares occupied by own pieces for actual mobility count
+        ulong ownPieces = isWhite ? board.WhitePiecesBitboard : board.BlackPiecesBitboard;
+        attacks &= ~ownPieces;
+    
+        return attacks;
     }
     
     public static float CalculateGamePhase(Board board)
