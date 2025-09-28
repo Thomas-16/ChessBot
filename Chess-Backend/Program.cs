@@ -97,14 +97,17 @@ static string GetConnectionString(IConfiguration configuration)
             // Parse Render DATABASE_URL format: postgres://user:password@host:port/database
             var uri = new Uri(databaseUrl);
             var userInfo = uri.UserInfo.Split(':');
-            var connectionString = $"Host={uri.Host};Port={uri.Port};Database={uri.LocalPath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true;Include Error Detail=true;";
+            var port = uri.Port != -1 ? uri.Port : 5432; // Default PostgreSQL port if not specified
 
-            Console.WriteLine($"Parsed connection string: Host={uri.Host};Port={uri.Port};Database={uri.LocalPath.TrimStart('/')};Username={userInfo[0]};Password=***;SSL Mode=Require;Trust Server Certificate=true;");
+            var connectionString = $"Host={uri.Host};Port={port};Database={uri.LocalPath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true;Include Error Detail=true;";
+
+            Console.WriteLine($"Parsed connection string: Host={uri.Host};Port={port};Database={uri.LocalPath.TrimStart('/')};Username={userInfo[0]};Password=***;SSL Mode=Require;Trust Server Certificate=true;");
             return connectionString;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error parsing DATABASE_URL: {ex.Message}");
+            Console.WriteLine($"DATABASE_URL was: {databaseUrl}");
             throw;
         }
     }
