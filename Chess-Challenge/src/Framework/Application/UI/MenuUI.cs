@@ -56,8 +56,8 @@ namespace ChessChallenge.Application
             UIHelper.DrawText("Difficulty", labelPos, UIHelper.ScaleInt(34), 1, Color.WHITE, UIHelper.AlignH.Centre);
             buttonPos.Y += 23;
 
-            // Create difficulty buttons (vertical layout)
-            Vector2 difficultyButtonSize = UIHelper.Scale(buttonSize);
+            // Create difficulty buttons (vertical layout) - same size as other buttons
+            Vector2 difficultyButtonSize = buttonSize;
             float difficultySpacing = difficultyButtonSize.Y * 1.1f;
 
             string[] difficultyNames = { "Easy", "Medium", "Hard", "Expert" };
@@ -75,16 +75,9 @@ namespace ChessChallenge.Application
 
             buttonPos.Y += difficultySpacing * 4;
 
-            // Window and quit buttons
+            // Settings and quit buttons
             buttonPos.Y += breakSpacing;
 
-            bool isBigWindow = Raylib.GetScreenWidth() > Settings.ScreenSizeSmall.X;
-            string windowButtonName = isBigWindow ? "Smaller Window" : "Bigger Window";
-            if (NextButtonInRow(windowButtonName, ref buttonPos, spacing, buttonSize))
-            {
-                Program.SetWindowSize(isBigWindow ? Settings.ScreenSizeSmall : Settings.ScreenSizeBig);
-            }
-            
             string soundButtonName = Settings.EnableSounds ? "Sound: ON" : "Sound: OFF";
             if (NextButtonInRow(soundButtonName, ref buttonPos, spacing, buttonSize))
             {
