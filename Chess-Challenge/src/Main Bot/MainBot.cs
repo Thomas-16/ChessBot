@@ -35,11 +35,12 @@ public class MainBot : IChessBot
         public double evaluationStrength;
         public double evaluationRandomness;
         public double firstOrderedMoveChance;
+        public double maxBlunderScore;
 
         public DifficultyConfig(int timeLimit, int maxDepth, int maxExtensions, int maxAspirationReSearches,
                                int ttSizeMB, bool useOpeningBook, int openingBookDepth,
                                bool useTT, bool useNMP, bool useExt, bool useAW, bool useMO,
-                               double evalStrength, double evalRandom, double firstOrderedChance)
+                               double evalStrength, double evalRandom, double firstOrderedChance, int maxBlunderScore)
         {
             this.timeLimit = timeLimit;
             this.maxDepth = maxDepth;
@@ -56,6 +57,7 @@ public class MainBot : IChessBot
             this.evaluationStrength = evalStrength;
             this.evaluationRandomness = evalRandom;
             this.firstOrderedMoveChance = firstOrderedChance;
+            this.maxBlunderScore = maxBlunderScore;
         }
     }
 
@@ -65,25 +67,25 @@ public class MainBot : IChessBot
         new DifficultyConfig(timeLimit: 20, maxDepth: 3, maxExtensions: 0, maxAspirationReSearches: 0,
                             ttSizeMB: 0, useOpeningBook: false, openingBookDepth: 0,
                             useTT: false, useNMP: false, useExt: false, useAW: false, useMO: true,
-                            evalStrength: 0.15, evalRandom: 0.35, firstOrderedChance: 0.2),
+                            evalStrength: 0.15, evalRandom: 0.35, firstOrderedChance: 0.2, maxBlunderScore: 700),
 
         // Medium: Basic engine
         new DifficultyConfig(timeLimit: 50, maxDepth: 4, maxExtensions: 2, maxAspirationReSearches: 1,
                             ttSizeMB: 16, useOpeningBook: true, openingBookDepth: 3,
                             useTT: true, useNMP: false, useExt: false, useAW: false, useMO: true,
-                            evalStrength: 0.5, evalRandom: 0.25, firstOrderedChance: 0.05),
+                            evalStrength: 0.5, evalRandom: 0.25, firstOrderedChance: 0.05, maxBlunderScore: 300),
 
         // Hard: Good tactical engine
         new DifficultyConfig(timeLimit: 100, maxDepth: 10, maxExtensions: 4, maxAspirationReSearches: 2,
                             ttSizeMB: 32, useOpeningBook: true, openingBookDepth: 10,
                             useTT: true, useNMP: true, useExt: true, useAW: false, useMO: true,
-                            evalStrength: 0.75, evalRandom: 0.15, firstOrderedChance: 0.0),
+                            evalStrength: 0.75, evalRandom: 0.15, firstOrderedChance: 0.0, maxBlunderScore: 150),
 
         // Expert: Full strength
         new DifficultyConfig(timeLimit: 200, maxDepth: 256, maxExtensions: 13, maxAspirationReSearches: 4,
                             ttSizeMB: 64, useOpeningBook: true, openingBookDepth: 18,
                             useTT: true, useNMP: true, useExt: true, useAW: true, useMO: true,
-                            evalStrength: 1.0, evalRandom: 0, firstOrderedChance: 0.0)
+                            evalStrength: 1.0, evalRandom: 0, firstOrderedChance: 0.0, maxBlunderScore: 0)
     };
 
     DifficultyConfig currentConfig;
@@ -188,7 +190,7 @@ public class MainBot : IChessBot
             int afterEval = Search(board, 2, -9999999, 9999999, true);
             board.UndoMove(firstOrderedMove);
 
-            if (afterEval < beforeEval - 600) // 600 is the max material we can throw
+            if (afterEval < beforeEval - currentConfig.maxBlunderScore)
             {
                 Console.WriteLine($"First ordered move loses too much eval, not doing it. Before eval: {beforeEval}, after eval: {afterEval}");
             }
