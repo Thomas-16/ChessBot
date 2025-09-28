@@ -54,7 +54,8 @@ namespace ChessChallenge.Application
             MoveFrom,
             MoveTo,
             LegalMove,
-            Check
+            Check,
+            Selected
         }
 
 
@@ -165,6 +166,7 @@ namespace ChessChallenge.Application
                 HighlightType.MoveTo => isLight ? theme.MoveToLight : theme.MoveToDark,
                 HighlightType.LegalMove => isLight ? theme.LegalLight : theme.LegalDark,
                 HighlightType.Check => isLight ? theme.CheckLight : theme.CheckDark,
+                HighlightType.Selected => isLight ? theme.selectedLight : theme.selectedDark,
                 _ => Color.PINK
             };
 
@@ -311,6 +313,11 @@ namespace ChessChallenge.Application
             {
                 HighlightMove(lastMove);
             }
+        }
+
+        public void ResetSquareColour(int square)
+        {
+            squareColOverrides.Remove(square);
         }
 
 
