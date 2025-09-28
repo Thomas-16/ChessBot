@@ -3,6 +3,11 @@ using Raylib_cs;
 using System.IO;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using ChessChallenge.Application.Config;
+using ChessChallenge.Application.Services;
 
 namespace ChessChallenge.Application
 {
@@ -12,8 +17,11 @@ namespace ChessChallenge.Application
         static Camera2D cam;
 
         public static bool UCI_MODE = false;
-
         public static bool SIMPLIFIED_MODE = true;
+
+        // Dependency injection services
+        public static IServiceProvider? ServiceProvider { get; private set; }
+        public static GameStorageService? GameStorage { get; private set; }
 
         public static void Main(string[] args)
         {
@@ -23,7 +31,42 @@ namespace ChessChallenge.Application
                 return;
             }
             
+            // Initialize services
+            InitializeServices();
+            
             RunGUIMode();
+        }
+
+        static void InitializeServices()
+        {
+            try
+            {
+                // Build configuration
+                var configuration = new ConfigurationBuilder()
+                    .SetBasePath(Directory.GetCurrentDirectory())
+                    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                    .AddEnvironmentVariables()
+                    .Build();
+
+                // Load backend configuration
+                var backendConfig = BackendConfig.LoadFromConfiguration(configuration);
+
+                // Setup dependency injection
+                var services = new ServiceCollection();
+                services.AddSingleton(backendConfig);
+                services.AddHttpClient<BackendApiService>();
+                services.AddSingleton<GameStorageService>();
+
+                ServiceProvider = services.BuildServiceProvider();
+                GameStorage = ServiceProvider.GetRequiredService<GameStorageService>();
+
+                ConsoleHelper.Log("🔧 Services initialized successfully", false, ConsoleColor.Green);
+            }
+            catch (Exception ex)
+            {
+                ConsoleHelper.Log($"⚠️ Failed to initialize services: {ex.Message}", false, ConsoleColor.Yellow);
+                ConsoleHelper.Log("🎮 Continuing in offline mode", false, ConsoleColor.Cyan);
+            }
         }
         
         static void RunUCIMode()
@@ -55,6 +98,28 @@ namespace ChessChallenge.Application
             UpdateCamera(screenWidth, screenHeight);
 
             ChallengeController controller = new();
+
+            // Initialize backend connection asynchronously
+            if (GameStorage != null)
+            {
+                ConsoleHelper.Log("🚀 Starting backend connection...", false, ConsoleColor.Cyan);
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var connected = await GameStorage.InitializeConnectionAsync();
+                        ConsoleHelper.Log($"🔗 Backend connection result: {connected}", false, connected ? ConsoleColor.Green : ConsoleColor.Yellow);
+                    }
+                    catch (Exception ex)
+                    {
+                        ConsoleHelper.Log($"❌ Backend connection error: {ex.Message}", false, ConsoleColor.Red);
+                    }
+                });
+            }
+            else
+            {
+                ConsoleHelper.Log("⚠️ GameStorage is null - no backend integration", false, ConsoleColor.Yellow);
+            }
 
             int lastWidth = Raylib.GetScreenWidth();
             int lastHeight = Raylib.GetScreenHeight();

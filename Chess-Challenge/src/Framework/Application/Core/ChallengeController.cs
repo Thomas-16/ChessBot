@@ -8,6 +8,7 @@ using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using ChessChallenge.Application.Services;
 using static ChessChallenge.Application.Settings;
 using static ChessChallenge.Application.ConsoleHelper;
 
@@ -56,6 +57,9 @@ namespace ChessChallenge.Application
         readonly int debugTokenCount;
         readonly StringBuilder pgns;
 
+        // Backend integration
+        readonly GameStorageService? gameStorage;
+
         public ChallengeController()
         {
             Log($"Launching Chess-Challenge version {Settings.Version}");
@@ -67,6 +71,9 @@ namespace ChessChallenge.Application
             boardUI = new BoardUI();
             board = new Board();
             pgns = new();
+
+            // Initialize backend integration
+            gameStorage = Program.GameStorage;
 
             BotStatsA = new BotMatchStats("IBot");
             BotStatsB = new BotMatchStats("IBot");
@@ -81,6 +88,15 @@ namespace ChessChallenge.Application
             // End any ongoing game
             EndGame(GameResult.DrawByArbiter, log: false, autoStartNextBotMatch: false);
             gameID = rng.Next();
+
+            // Start new game session in backend
+            _ = Task.Run(async () =>
+            {
+                if (gameStorage != null)
+                {
+                    await gameStorage.StartNewGameAsync();
+                }
+            });
 
             // Stop prev task and create a new one
             if (RunBotsOnSeparateThread)
@@ -299,6 +315,29 @@ namespace ChessChallenge.Application
 
                 string pgn = PGNCreator.CreatePGN(board, result, GetPlayerName(PlayerWhite), GetPlayerName(PlayerBlack));
                 pgns.AppendLine(pgn);
+
+                // Save game to backend
+                Log($"🔄 Attempting to save game to backend...", false, ConsoleColor.Cyan);
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        if (gameStorage != null)
+                        {
+                            Log($"📤 Calling SaveGameAsync...", false, ConsoleColor.Yellow);
+                            await gameStorage.SaveGameAsync(board, result, GetPlayerName(PlayerWhite), GetPlayerName(PlayerBlack));
+                            Log($"✅ SaveGameAsync completed", false, ConsoleColor.Green);
+                        }
+                        else
+                        {
+                            Log("❌ gameStorage is null", false, ConsoleColor.Red);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"❌ Error saving game: {ex.Message}", false, ConsoleColor.Red);
+                    }
+                });
 
                 // If 2 bots playing each other, start next game automatically.
                 if (PlayerWhite.IsBot && PlayerBlack.IsBot)

@@ -18,6 +18,10 @@ namespace ChessChallenge.Application
         // Audio settings
         public static bool EnableSounds = true;
 
+        // Backend settings
+        public static bool EnableBackendLogging = true;
+        public static bool ShowBackendStatus = true;
+
         // Other settings
         public const LogType MessagesToLog = LogType.All;
 
