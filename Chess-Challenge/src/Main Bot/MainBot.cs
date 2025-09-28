@@ -66,7 +66,7 @@ public class MainBot : IChessBot
         new DifficultyConfig(timeLimit: 20, maxDepth: 3, maxExtensions: 0, maxAspirationReSearches: 0,
                             ttSizeMB: 0, useOpeningBook: false, openingBookDepth: 0,
                             useTT: false, useNMP: false, useExt: false, useAW: false, useMO: true,
-                            evalStrength: 0.15, evalRandom: 0.35, firstOrderedChance: 0.3, maxBlunderScore: 700),
+                            evalStrength: 0.15, evalRandom: 0.4, firstOrderedChance: 0.3, maxBlunderScore: 700),
 
         // Medium: Basic engine
         new DifficultyConfig(timeLimit: 50, maxDepth: 4, maxExtensions: 2, maxAspirationReSearches: 1,
