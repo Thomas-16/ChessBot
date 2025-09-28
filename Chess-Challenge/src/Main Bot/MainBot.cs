@@ -4,26 +4,104 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 
+public enum DifficultyLevel
+{
+    Easy,
+    Medium,
+    Hard,
+    Expert
+}
+
 public class MainBot : IChessBot
 {
+    // DIFFICULTY SETTING - Change this to adjust bot strength
+    public static readonly DifficultyLevel CURRENT_DIFFICULTY = DifficultyLevel.Hard;
+
+    // Difficulty-based configuration
+    struct DifficultyConfig
+    {
+        public int timeLimit;
+        public int maxDepth;
+        public int maxExtensions;
+        public int maxAspirationReSearches;
+        public int transpositionTableSizeMB;
+        public bool useOpeningBook;
+        public int openingBookDepth;
+        public bool useTranspositionTable;
+        public bool useNullMovePruning;
+        public bool useExtensions;
+        public bool useAspirationWindows;
+        public bool useMoveOrdering;
+        public double evaluationStrength;
+        public double evaluationRandomness;
+        public double firstOrderedMoveChance;
+
+        public DifficultyConfig(int timeLimit, int maxDepth, int maxExtensions, int maxAspirationReSearches,
+                               int ttSizeMB, bool useOpeningBook, int openingBookDepth,
+                               bool useTT, bool useNMP, bool useExt, bool useAW, bool useMO,
+                               double evalStrength, double evalRandom, double firstOrderedChance)
+        {
+            this.timeLimit = timeLimit;
+            this.maxDepth = maxDepth;
+            this.maxExtensions = maxExtensions;
+            this.maxAspirationReSearches = maxAspirationReSearches;
+            this.transpositionTableSizeMB = ttSizeMB;
+            this.useOpeningBook = useOpeningBook;
+            this.openingBookDepth = openingBookDepth;
+            this.useTranspositionTable = useTT;
+            this.useNullMovePruning = useNMP;
+            this.useExtensions = useExt;
+            this.useAspirationWindows = useAW;
+            this.useMoveOrdering = useMO;
+            this.evaluationStrength = evalStrength;
+            this.evaluationRandomness = evalRandom;
+            this.firstOrderedMoveChance = firstOrderedChance;
+        }
+    }
+
+    static readonly DifficultyConfig[] difficultyConfigs = 
+    {
+        // Easy: Major handicaps
+        new DifficultyConfig(timeLimit: 20, maxDepth: 3, maxExtensions: 0, maxAspirationReSearches: 0,
+                            ttSizeMB: 0, useOpeningBook: false, openingBookDepth: 0,
+                            useTT: false, useNMP: false, useExt: false, useAW: false, useMO: true,
+                            evalStrength: 0.15, evalRandom: 0.35, firstOrderedChance: 0.2),
+
+        // Medium: Basic engine
+        new DifficultyConfig(timeLimit: 50, maxDepth: 4, maxExtensions: 2, maxAspirationReSearches: 1,
+                            ttSizeMB: 16, useOpeningBook: true, openingBookDepth: 3,
+                            useTT: true, useNMP: false, useExt: false, useAW: false, useMO: true,
+                            evalStrength: 0.5, evalRandom: 0.25, firstOrderedChance: 0.05),
+
+        // Hard: Good tactical engine
+        new DifficultyConfig(timeLimit: 100, maxDepth: 10, maxExtensions: 4, maxAspirationReSearches: 2,
+                            ttSizeMB: 32, useOpeningBook: true, openingBookDepth: 10,
+                            useTT: true, useNMP: true, useExt: true, useAW: false, useMO: true,
+                            evalStrength: 0.75, evalRandom: 0.15, firstOrderedChance: 0.0),
+
+        // Expert: Full strength
+        new DifficultyConfig(timeLimit: 200, maxDepth: 256, maxExtensions: 13, maxAspirationReSearches: 4,
+                            ttSizeMB: 64, useOpeningBook: true, openingBookDepth: 18,
+                            useTT: true, useNMP: true, useExt: true, useAW: true, useMO: true,
+                            evalStrength: 1.0, evalRandom: 0, firstOrderedChance: 0.0)
+    };
+
+    DifficultyConfig currentConfig;
+    Random random = new Random();
+
     Move bestMoveThisIteration;
     Move bestMove; // Best move so far
-    
+
     TranspositionTable? transpositionTable;
     MoveOrdering? moveOrdering;
-    
+
     OpeningBook openingBook = new(LoadBookData());
-    
+
     Stopwatch searchStopwatch;
 
     public const int immediateMateScore = 30000;
 
-    const int maxExtensions = 13;
-    
-    const int maxAspirationReSearches = 4; // Maximum re-searches at same depth
-    
-    // Set hardTimeLimit to 0 to use match Timer in GUI mode
-    int hardTimeLimit = 200; // ms
+    int hardTimeLimit; // ms
     int softTimeLimit;
     bool useTimer;
     bool useMoveTime;
@@ -36,6 +114,10 @@ public class MainBot : IChessBot
     
     public Move Think(Board board, Timer timer)
     {
+        // Initialize difficulty configuration
+        currentConfig = difficultyConfigs[(int)CURRENT_DIFFICULTY];
+        hardTimeLimit = currentConfig.timeLimit;
+
         if (!ChessChallenge.Application.Program.UCI_MODE && !guiModeIsTimerConfiged)
         {
             if (hardTimeLimit == 0)
@@ -48,9 +130,10 @@ public class MainBot : IChessBot
             }
             guiModeIsTimerConfiged = true;
         }
-        
-        // Book moves
-        if (board.PlyCount <= 18 && openingBook.TryGetBookMove(board, out string moveString, 0.8)) {
+        // Book moves (if enabled for this difficulty)
+        if (currentConfig.useOpeningBook && board.PlyCount <= currentConfig.openingBookDepth &&
+            openingBook.TryGetBookMove(board, out string moveString, 0.25))
+        {
             if(!ChessChallenge.Application.Program.UCI_MODE) Console.WriteLine($"Book move found: {moveString}");
             return new Move(moveString, board);
         }
@@ -60,19 +143,63 @@ public class MainBot : IChessBot
         bestMove = Move.NullMove;
         searchCanceledImmediately = false;
         searchCanceledAfterIteration = false;
-        
-        if (transpositionTable == null)
-            transpositionTable = new TranspositionTable(64);
-            
-        if (moveOrdering == null)
-            moveOrdering = new MoveOrdering();
-        
-        moveOrdering.ResetKillers();
-        moveOrdering.DecayHistory();
+
+        // Initialize transposition table based on difficulty
+        if (currentConfig.useTranspositionTable)
+        {
+            if (transpositionTable == null)
+                transpositionTable = new TranspositionTable(currentConfig.transpositionTableSizeMB);
+        }
+        else
+        {
+            transpositionTable = null;
+        }
+
+        // Initialize move ordering based on difficulty
+        if (currentConfig.useMoveOrdering)
+        {
+            if (moveOrdering == null)
+                moveOrdering = new MoveOrdering();
+
+            moveOrdering.ResetKillers();
+            moveOrdering.DecayHistory();
+        }
+        else
+        {
+            moveOrdering = null;
+        }
 
         SetupTimeLimits(timer);
         
         searchStopwatch = Stopwatch.StartNew();
+        
+        // First ordered move injection for Easy level
+        if (currentConfig.firstOrderedMoveChance > 0 && random.NextDouble() < currentConfig.firstOrderedMoveChance)
+        {
+            Span<Move> movesSpan = stackalloc Move[218];
+            board.GetLegalMovesNonAlloc(ref movesSpan);
+            moveOrdering?.OrderMoves(board, movesSpan, false, 0, Move.NullMove, currentConfig.evaluationStrength);
+
+            Move firstOrderedMove = movesSpan[0];
+            
+            int beforeEval = Search(board, 2, -9999999, 9999999, true);
+            
+            board.MakeMove(firstOrderedMove);
+            int afterEval = Search(board, 2, -9999999, 9999999, true);
+            board.UndoMove(firstOrderedMove);
+
+            if (afterEval < beforeEval - 600) // 600 is the max material we can throw
+            {
+                Console.WriteLine($"First ordered move loses too much eval, not doing it. Before eval: {beforeEval}, after eval: {afterEval}");
+            }
+            else
+            {
+                if (!ChessChallenge.Application.Program.UCI_MODE)
+                    Console.WriteLine($"First ordered move selected: {firstOrderedMove}");
+                
+                return firstOrderedMove;
+            }
+        }
         
         int bestEval = 0;
         int depthSearched = 0;
@@ -80,7 +207,7 @@ public class MainBot : IChessBot
         int previousDepthScore = 0; // Track score stability
         
         // Iterative deepening loop
-        for (int depth = 1; depth <= 256; depth++)
+        for (int depth = 1; depth <= currentConfig.maxDepth; depth++)
         {
             // Don't start a new iteration if the soft limit is hit
             if (searchStopwatch.ElapsedMilliseconds > softTimeLimit)
@@ -92,12 +219,14 @@ public class MainBot : IChessBot
             int beta = 9999999;
             
             // Adaptive aspiration window sizing based on game phase and score stability
-            int aspirationDelta = GetAdaptiveAspirationDelta(board, depth, bestEval, previousDepthScore);
-            int originalAspirationDelta = aspirationDelta; // Store original for re-search logic
-            
-            // Use aspiration windows after depth 4 when we have a reliable score
-            if (depth > 4 && Math.Abs(bestEval) < 29000 && aspirationDelta > 0) // aspirationDelta == 0 means disabled
+            int aspirationDelta = 0;
+            int originalAspirationDelta = 0;
+
+            // Use aspiration windows only if enabled for this difficulty
+            if (currentConfig.useAspirationWindows && depth > 4 && Math.Abs(bestEval) < 29000)
             {
+                aspirationDelta = GetAdaptiveAspirationDelta(board, depth, bestEval, previousDepthScore);
+                originalAspirationDelta = aspirationDelta;
                 alpha = bestEval - aspirationDelta;
                 beta = bestEval + aspirationDelta;
             }
@@ -126,7 +255,7 @@ public class MainBot : IChessBot
                 totalAspirationReSearches++;
                 
                 // Prevent infinite re-searches
-                if (aspirationReSearchCount >= maxAspirationReSearches)
+                if (aspirationReSearchCount >= currentConfig.maxAspirationReSearches)
                 {
                     // Give up and search with full window
                     alpha = -9999999;
@@ -273,11 +402,16 @@ public class MainBot : IChessBot
         
         ulong zobristKey = board.ZobristKey;
         int originalAlpha = alpha;
-        
-        if (transpositionTable.ProbeEntry(zobristKey, depth, alpha, beta, out int ttValue, out Move ttMove))
+        Move ttMove = Move.NullMove;
+
+        // Use transposition table only if enabled
+        if (currentConfig.useTranspositionTable && transpositionTable != null)
         {
-            if (!isRoot && Math.Abs(ttValue) < 29000)
-                return ttValue;
+            if (transpositionTable.ProbeEntry(zobristKey, depth, alpha, beta, out int ttValue, out ttMove))
+            {
+                if (!isRoot && Math.Abs(ttValue) < 29000)
+                    return ttValue;
+            }
         }
         
         if (board.IsInCheckmate())
@@ -298,8 +432,8 @@ public class MainBot : IChessBot
             return QuiescenceSearch(board, alpha, beta);
         }
         
-        // Null Move Pruning
-        if (!isRoot && nullMoveAllowed && depth >= 3 && !board.IsInCheck() &&
+        // Null Move Pruning (only if enabled for this difficulty)
+        if (currentConfig.useNullMovePruning && !isRoot && nullMoveAllowed && depth >= 3 && !board.IsInCheck() &&
             beta > -29000 && // Don't null move when opponent has a forced mate
             !IsPawnEndgame(board)) // Avoid null move in pawn endgames due to zugzwang
         {
@@ -327,7 +461,12 @@ public class MainBot : IChessBot
         
         Span<Move> movesSpan = stackalloc Move[218];
         board.GetLegalMovesNonAlloc(ref movesSpan);
-        moveOrdering.OrderMoves(board, movesSpan, false, ply, ttMove);
+
+        // Use move ordering only if enabled
+        if (currentConfig.useMoveOrdering && moveOrdering != null)
+        {
+            moveOrdering.OrderMoves(board, movesSpan, false, ply, ttMove, currentConfig.evaluationStrength);
+        }
         
         Move bestMoveThisPosition = Move.NullMove;
         int bestScore = int.MinValue;
@@ -342,9 +481,9 @@ public class MainBot : IChessBot
                 
             board.MakeMove(move);
             
-            // Extend the depth of the search in certain interesting cases
+            // Extend the depth of the search in certain interesting cases (if enabled)
             int extension = 0;
-            if (numExtensions < maxExtensions)
+            if (currentConfig.useExtensions && numExtensions < currentConfig.maxExtensions)
             {
                 if (board.IsInCheck())
                 {
@@ -405,20 +544,23 @@ public class MainBot : IChessBot
             
             if (score >= beta) // fail-high cutoff
             {
-                if (move.CapturePieceType == PieceType.None && !move.IsPromotion)
+                if (currentConfig.useMoveOrdering && moveOrdering != null && move.CapturePieceType == PieceType.None && !move.IsPromotion)
                 {
                     // Record as killer move
                     if (!isRoot)
                         moveOrdering.AddKiller(ply, move);
-                
+
                     // Update history heuristic
                     int historyScore = depth * depth;
                     int colorIndex = board.IsWhiteToMove ? 0 : 1;
                     moveOrdering.history[colorIndex, move.StartSquare.Index, move.TargetSquare.Index] += historyScore;
                 }
 
-                // Store as LOWER bound at this node
-                transpositionTable.StoreEntry(zobristKey, beta, depth, NodeType.LowerBound, bestMoveThisPosition);
+                // Store in transposition table if enabled
+                if (currentConfig.useTranspositionTable && transpositionTable != null)
+                {
+                    transpositionTable.StoreEntry(zobristKey, beta, depth, NodeType.LowerBound, bestMoveThisPosition);
+                }
                 return beta; // fail-hard
             }
 
@@ -429,14 +571,17 @@ public class MainBot : IChessBot
             }
         }
         
-        // Only store in TT if search wasn't interrupted
+        // Only store in TT if search wasn't interrupted and TT is enabled
         if (!searchCanceledImmediately)
         {
-            NodeType nodeType = bestScore <= originalAlpha ? NodeType.UpperBound :
-                               bestScore >= beta ? NodeType.LowerBound : NodeType.Exact;
-            
-            transpositionTable.StoreEntry(zobristKey, bestScore, depth, nodeType, bestMoveThisPosition);
-            
+            if (currentConfig.useTranspositionTable && transpositionTable != null)
+            {
+                NodeType nodeType = bestScore <= originalAlpha ? NodeType.UpperBound :
+                                   bestScore >= beta ? NodeType.LowerBound : NodeType.Exact;
+
+                transpositionTable.StoreEntry(zobristKey, bestScore, depth, nodeType, bestMoveThisPosition);
+            }
+
             if (isRoot)
                 bestMoveThisIteration = bestMoveThisPosition;
         }
@@ -469,7 +614,7 @@ public class MainBot : IChessBot
         }
         
         positionsEvaluated++;
-        int evaluation = Evaluation.Evaluate(board);
+        int evaluation = Evaluation.Evaluate(board, currentConfig.evaluationStrength, currentConfig.evaluationRandomness);
         
         if (evaluation >= beta)
             return beta;
@@ -493,7 +638,12 @@ public class MainBot : IChessBot
         
         Span<Move> capturesSpan = stackalloc Move[218];
         board.GetLegalMovesNonAlloc(ref capturesSpan, true);
-        moveOrdering.OrderMoves(board, capturesSpan, true);
+
+        // Use move ordering only if enabled
+        if (currentConfig.useMoveOrdering && moveOrdering != null)
+        {
+            moveOrdering.OrderMoves(board, capturesSpan, true, 0, Move.NullMove, currentConfig.evaluationStrength);
+        }
         
         foreach (Move capture in capturesSpan)
         {

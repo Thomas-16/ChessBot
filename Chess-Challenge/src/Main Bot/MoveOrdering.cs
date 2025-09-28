@@ -25,7 +25,7 @@ public class MoveOrdering
         history = new int[2, 64, 64];
     }
     
-    public void OrderMoves(Board board, Span<Move> moves, bool inQSearch, int ply = 0, Move hashMove = default)
+    public void OrderMoves(Board board, Span<Move> moves, bool inQSearch, int ply = 0, Move hashMove = default, double evaluationStrength = 1.0)
     {
         ulong oppAttacks = board.GetOpponentAttackMap();
         
@@ -74,10 +74,10 @@ public class MoveOrdering
                 score += promoteBias;
             }
             
-            // Encourage moving into a better square(based on PST)
+            // Encourage moving into a better square(based on PST) - scaled by evaluation strength
             int toScore = Evaluation.GetPieceSquareValue(movePieceType, Evaluation.GetSquareIndexSided(targetSquare, board.IsWhiteToMove), openingWeight, endGameWeight);
             int fromScore = Evaluation.GetPieceSquareValue(movePieceType, Evaluation.GetSquareIndexSided(startSquare, board.IsWhiteToMove), openingWeight, endGameWeight);
-            score += toScore - fromScore;
+            score += (int)((toScore - fromScore) * evaluationStrength);
             
             // Is not a pawn or a king and is going into a square the enemy is attacking
             if (movePieceType != PieceType.King && movePieceType != PieceType.Pawn && BitboardHelper.SquareIsSet(oppAttacks, targetSquare))

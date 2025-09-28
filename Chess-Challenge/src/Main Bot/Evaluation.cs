@@ -60,7 +60,7 @@ public static class Evaluation
     // The position is assumed to be 'quiet', i.e. no captures are available that could drastically affect the evaluation.
     // The score that's returned is given from the perspective of whoever's turn it is to move.
     // So a positive score means the player whose turn it is to move has an advantage, while a negative score indicates a disadvantage.
-    public static int Evaluate(Board board)
+    public static int Evaluate(Board board, double evaluationStrength = 1.0, double evaluationRandomness = 0.0)
     {
         if (board.IsInCheckmate())
         {
@@ -79,6 +79,12 @@ public static class Evaluation
         // Based on remaining material
         float endGameWeight = CalculateGamePhase(board);
         float openingWeight = 1f - endGameWeight;
+
+        // For very low evaluation strength (Easy level), return mostly material only
+        bool useBasicEvaluationOnly = evaluationStrength <= 0.25;
+        double randomMultiplierUpper = 1 + evaluationRandomness;
+        double randomMultiplierLower = 1 - evaluationRandomness;
+        double randomnessMultiplier;
         
         // Get all piece bitboards once for efficiency
         ulong whitePawns = board.GetPieceBitboard(PieceType.Pawn, true);
@@ -105,7 +111,8 @@ public static class Evaluation
                                 EvaluateMaterial(blackQueens, PieceType.Queen, openingWeight, endGameWeight);
         evaluation += whiteMaterialEval - blackMaterialEval;
         
-        // Evaluate piece square table
+        
+        // Evaluate piece square table (scaled by evaluation strength)
         int whitePieceSquareTableEval = EvaluatePieceSquareTable(whitePawns, true, PieceType.Pawn, openingWeight, endGameWeight) +
                                         EvaluatePieceSquareTable(whiteKnights, true, PieceType.Knight, openingWeight, endGameWeight) +
                                         EvaluatePieceSquareTable(whiteBishops, true, PieceType.Bishop, openingWeight, endGameWeight) +
@@ -116,7 +123,13 @@ public static class Evaluation
                                         EvaluatePieceSquareTable(blackBishops, false, PieceType.Bishop, openingWeight, endGameWeight) +
                                         EvaluatePieceSquareTable(blackRooks, false, PieceType.Rook, openingWeight, endGameWeight) +
                                         EvaluatePieceSquareTable(blackQueens, false, PieceType.Queen, openingWeight, endGameWeight);
-        evaluation += whitePieceSquareTableEval - blackPieceSquareTableEval;
+        evaluation += (int)((whitePieceSquareTableEval - blackPieceSquareTableEval) * evaluationStrength);
+        
+        // For Easy level, return early
+        if (useBasicEvaluationOnly)
+        {
+            return board.IsWhiteToMove ? evaluation : -evaluation;
+        }
         
         // King evaluation - get squares and evaluate normally
         Square whiteKingSquare = board.GetKingSquare(true);
@@ -124,40 +137,46 @@ public static class Evaluation
         
         int whiteKingValue = GetPieceSquareValue(PieceType.King, GetSquareIndexSided(whiteKingSquare, true), openingWeight, endGameWeight);
         int blackKingValue = GetPieceSquareValue(PieceType.King, GetSquareIndexSided(blackKingSquare, false), openingWeight, endGameWeight);
-        evaluation += whiteKingValue - blackKingValue;
+        randomnessMultiplier = new Random().NextDouble() * (randomMultiplierUpper - (randomMultiplierLower)) + (randomMultiplierLower);
+        evaluation += (int)((whiteKingValue - blackKingValue) * evaluationStrength * randomnessMultiplier);
 
         ulong whitePiecesWithoutKing = board.WhitePiecesBitboard & ~board.GetPieceBitboard(PieceType.King, true);
         ulong blackPiecesWithoutKing = board.BlackPiecesBitboard & ~board.GetPieceBitboard(PieceType.King, false);
         
-        // Mop-up eval for endgame
+        // Mop-up eval for endgame (scaled by evaluation strength)
         int whiteMopUpEval = EvaluateMopUp(whiteMaterialEval, blackMaterialEval, whiteKingSquare, blackKingSquare, endGameWeight);
         int blackMopUpEval = EvaluateMopUp(blackMaterialEval, whiteMaterialEval, blackKingSquare, whiteKingSquare, endGameWeight);
-        evaluation += whiteMopUpEval - blackMopUpEval;
+        randomnessMultiplier = new Random().NextDouble() * (randomMultiplierUpper - (randomMultiplierLower)) + (randomMultiplierLower);
+        evaluation += (int)((whiteMopUpEval - blackMopUpEval) * evaluationStrength * randomnessMultiplier);
 
-        // Center control
+        // Center control (scaled by evaluation strength)
         int whiteCenterControl = BitboardHelper.GetNumberOfSetBits((whitePiecesWithoutKing & ~whitePawns) & centerSquares) * pieceCenterControlScore
                                  + BitboardHelper.GetNumberOfSetBits(whitePawns & centerSquares) * pawnCenterControlScore;
         int blackCenterControl = BitboardHelper.GetNumberOfSetBits((blackPiecesWithoutKing & ~blackPawns) & centerSquares) * pieceCenterControlScore
                                  + BitboardHelper.GetNumberOfSetBits(blackPawns & centerSquares) * pawnCenterControlScore;
-        
-        // Apply with opening weight (important early, less important in endgame)
-        evaluation += (int)((whiteCenterControl - blackCenterControl) * openingWeight);
-        
-        // Passed pawns and isolated pawns
+
+        // Apply with opening weight and evaluation strength
+        randomnessMultiplier = new Random().NextDouble() * (randomMultiplierUpper - (randomMultiplierLower)) + (randomMultiplierLower);
+        evaluation += (int)((whiteCenterControl - blackCenterControl) * openingWeight * evaluationStrength * randomnessMultiplier);
+
+        // Passed pawns and isolated pawns (scaled by evaluation strength)
         int whitePawnScore = EvaluatePassedAndIsolatedPawns(whitePawns, blackPawns, true);
         int blackPawnScore = EvaluatePassedAndIsolatedPawns(blackPawns, whitePawns, false);
-        evaluation += whitePawnScore - blackPawnScore;
+        randomnessMultiplier = new Random().NextDouble() * (randomMultiplierUpper - (randomMultiplierLower)) + (randomMultiplierLower);
+        evaluation += (int)((whitePawnScore - blackPawnScore) * evaluationStrength * randomnessMultiplier);
         
-        // King safety
+        // King safety (scaled by evaluation strength)
         int whiteNumRooks = BitboardHelper.GetNumberOfSetBits(whiteRooks);
         int whiteNumQueens = BitboardHelper.GetNumberOfSetBits(whiteQueens);
         int blackNumRooks = BitboardHelper.GetNumberOfSetBits(blackRooks);
         int blackNumQueens = BitboardHelper.GetNumberOfSetBits(blackQueens);
         int whiteKingSafetyEval = EvaluateKingSafety(true, whiteKingSquare.Index, whitePawns, blackPawns, blackPieceSquareTableEval, blackNumRooks, blackNumQueens, openingWeight);
         int blackKingSafetyEval = EvaluateKingSafety(false, blackKingSquare.Index, blackPawns, whitePawns, whitePieceSquareTableEval, whiteNumRooks, whiteNumQueens, openingWeight);
-        evaluation += whiteKingSafetyEval - blackKingSafetyEval;
         
-        // Mobility
+        randomnessMultiplier = new Random().NextDouble() * (randomMultiplierUpper - (randomMultiplierLower)) + (randomMultiplierLower);
+        evaluation += (int)((whiteKingSafetyEval - blackKingSafetyEval) * evaluationStrength * randomnessMultiplier);
+
+        // Mobility (scaled by evaluation strength)
         int whiteMobilityScore = 0;
         int blackMobilityScore = 0;
         
@@ -170,8 +189,9 @@ public static class Evaluation
         blackMobilityScore += EvaluatePieceMobility(board, PieceType.Bishop, false, openingWeight, endGameWeight);
         blackMobilityScore += EvaluatePieceMobility(board, PieceType.Rook, false, openingWeight, endGameWeight);
         blackMobilityScore += EvaluatePieceMobility(board, PieceType.Queen, false, openingWeight, endGameWeight);
-        
-        evaluation += whiteMobilityScore - blackMobilityScore;
+
+        randomnessMultiplier = new Random().NextDouble() * (randomMultiplierUpper - (randomMultiplierLower)) + (randomMultiplierLower);
+        evaluation += (int)((whiteMobilityScore - blackMobilityScore) * evaluationStrength * randomnessMultiplier);
         
         
         return board.IsWhiteToMove ? evaluation : -evaluation;
