@@ -63,13 +63,13 @@ public class MainBot : IChessBot
     static readonly DifficultyConfig[] difficultyConfigs = 
     {
         // Easy: Major handicaps
-        new DifficultyConfig(timeLimit: 20, maxDepth: 2, maxExtensions: 0, maxAspirationReSearches: 0,
+        new DifficultyConfig(timeLimit: 20, maxDepth: 3, maxExtensions: 0, maxAspirationReSearches: 0,
                             ttSizeMB: 0, useOpeningBook: false, openingBookDepth: 0,
                             useTT: false, useNMP: false, useExt: false, useAW: false, useMO: true,
                             evalStrength: 0.15, evalRandom: 0.35, firstOrderedChance: 0.3, maxBlunderScore: 700),
 
         // Medium: Basic engine
-        new DifficultyConfig(timeLimit: 50, maxDepth: 3, maxExtensions: 2, maxAspirationReSearches: 1,
+        new DifficultyConfig(timeLimit: 50, maxDepth: 4, maxExtensions: 2, maxAspirationReSearches: 1,
                             ttSizeMB: 16, useOpeningBook: true, openingBookDepth: 3,
                             useTT: true, useNMP: false, useExt: false, useAW: false, useMO: true,
                             evalStrength: 0.5, evalRandom: 0.25, firstOrderedChance: 0.1, maxBlunderScore: 300),
