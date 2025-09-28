@@ -14,8 +14,7 @@ public enum DifficultyLevel
 
 public class MainBot : IChessBot
 {
-    // DIFFICULTY SETTING - Change this to adjust bot strength
-    public static DifficultyLevel CURRENT_DIFFICULTY { get; set; } = DifficultyLevel.Hard;
+    public static DifficultyLevel CURRENT_DIFFICULTY { get; set; } = DifficultyLevel.Medium;
 
     // Difficulty-based configuration
     struct DifficultyConfig
