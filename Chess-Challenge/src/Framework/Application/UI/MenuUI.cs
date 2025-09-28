@@ -119,8 +119,8 @@ namespace ChessChallenge.Application
             Color col = mouseOver ? (pressed ? pressCol : hoverCol) : normalCol;
 
             Raylib.DrawRectangleRec(rec, col);
-            Color textCol = Color.WHITE; // Always white text for better contrast
-            int fontSize = UIHelper.ScaleInt(28); // Smaller font for smaller buttons
+            Color textCol = Color.WHITE;
+            int fontSize = UIHelper.ScaleInt(30);
 
             UIHelper.DrawText(text, centre, fontSize, 1, textCol, UIHelper.AlignH.Centre);
 
