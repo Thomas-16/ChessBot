@@ -38,7 +38,7 @@ builder.Services.AddHttpClient<VoiceService>();
 builder.Services.AddScoped<DatabaseHealthCheck>();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database", failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded)
-    .AddCheck("api", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy, new[] { "api" });
+    .AddCheck("api", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), new[] { "api" });
 
 // Logging
 builder.Logging.ClearProviders();
