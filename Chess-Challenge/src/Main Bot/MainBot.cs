@@ -66,16 +66,16 @@ public class MainBot : IChessBot
         new DifficultyConfig(timeLimit: 20, maxDepth: 3, maxExtensions: 0, maxAspirationReSearches: 0,
                             ttSizeMB: 0, useOpeningBook: false, openingBookDepth: 0,
                             useTT: false, useNMP: false, useExt: false, useAW: false, useMO: true,
-                            evalStrength: 0.15, evalRandom: 0.4, firstOrderedChance: 0.3, maxBlunderScore: 700),
+                            evalStrength: 0.15, evalRandom: 0.4, firstOrderedChance: 0.5, maxBlunderScore: 700),
 
         // Medium: Basic engine
         new DifficultyConfig(timeLimit: 50, maxDepth: 4, maxExtensions: 2, maxAspirationReSearches: 1,
                             ttSizeMB: 16, useOpeningBook: true, openingBookDepth: 3,
                             useTT: true, useNMP: false, useExt: false, useAW: false, useMO: true,
-                            evalStrength: 0.5, evalRandom: 0.25, firstOrderedChance: 0.1, maxBlunderScore: 300),
+                            evalStrength: 0.5, evalRandom: 0.25, firstOrderedChance: 0.3, maxBlunderScore: 300),
 
         // Hard: Good tactical engine
-        new DifficultyConfig(timeLimit: 100, maxDepth: 8, maxExtensions: 4, maxAspirationReSearches: 2,
+        new DifficultyConfig(timeLimit: 100, maxDepth: 10, maxExtensions: 4, maxAspirationReSearches: 2,
                             ttSizeMB: 32, useOpeningBook: true, openingBookDepth: 10,
                             useTT: true, useNMP: true, useExt: true, useAW: false, useMO: true,
                             evalStrength: 0.75, evalRandom: 0.15, firstOrderedChance: 0.1, maxBlunderScore: 150),
