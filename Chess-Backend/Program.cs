@@ -35,8 +35,10 @@ builder.Services.AddScoped<VoiceService>();
 builder.Services.AddHttpClient<VoiceService>();
 
 // Add health checks
+builder.Services.AddScoped<DatabaseHealthCheck>();
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<ChessDbContext>();
+    .AddCheck<DatabaseHealthCheck>("database", failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded)
+    .AddCheck("api", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy, new[] { "api" });
 
 // Logging
 builder.Logging.ClearProviders();
@@ -54,8 +56,12 @@ if (app.Environment.IsDevelopment())
 app.UseRouting();
 app.UseCors();
 
-// Health check endpoint for Render
+// Health check endpoints
 app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("api")
+});
 
 // Map SignalR hub
 app.MapHub<ChessHub>("/chesshub");
@@ -86,10 +92,21 @@ static string GetConnectionString(IConfiguration configuration)
 
     if (!string.IsNullOrEmpty(databaseUrl))
     {
-        // Parse Render DATABASE_URL format: postgres://user:password@host:port/database
-        var uri = new Uri(databaseUrl);
-        var connectionString = $"Host={uri.Host};Port={uri.Port};Database={uri.LocalPath.TrimStart('/')};Username={uri.UserInfo.Split(':')[0]};Password={uri.UserInfo.Split(':')[1]};SSL Mode=Require;Trust Server Certificate=true;";
-        return connectionString;
+        try
+        {
+            // Parse Render DATABASE_URL format: postgres://user:password@host:port/database
+            var uri = new Uri(databaseUrl);
+            var userInfo = uri.UserInfo.Split(':');
+            var connectionString = $"Host={uri.Host};Port={uri.Port};Database={uri.LocalPath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true;Include Error Detail=true;";
+
+            Console.WriteLine($"Parsed connection string: Host={uri.Host};Port={uri.Port};Database={uri.LocalPath.TrimStart('/')};Username={userInfo[0]};Password=***;SSL Mode=Require;Trust Server Certificate=true;");
+            return connectionString;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error parsing DATABASE_URL: {ex.Message}");
+            throw;
+        }
     }
 
     // Fall back to local connection string
