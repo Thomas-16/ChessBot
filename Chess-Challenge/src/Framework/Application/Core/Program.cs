@@ -12,6 +12,8 @@ namespace ChessChallenge.Application
 
         public static bool UCI_MODE = false;
 
+        public static bool SIMPLIFIED_MODE = true;
+
         public static void Main(string[] args)
         {
             if (UCI_MODE)

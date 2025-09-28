@@ -272,8 +272,11 @@ namespace ChessChallenge.Application
 
             //Color textColTop = topTurnToMove ? activeTextCol : inactiveTextCol;
 
-            Draw(boardStartY + squareSize * 8 + spaceY, colNameBottom, nameBottom, timeBottom, bottomTextCol);
-            Draw(boardStartY - spaceY, colNameTop, nameTop, timeTop, topTextCol);
+            if (!Program.SIMPLIFIED_MODE)
+            {
+                Draw(boardStartY + squareSize * 8 + spaceY, colNameBottom, nameBottom, timeBottom, bottomTextCol);
+                Draw(boardStartY - spaceY, colNameTop, nameTop, timeTop, topTextCol);
+            }
 
             void Draw(float y, string colName, string name, int timeMs, Color textCol)
             {
