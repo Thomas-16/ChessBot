@@ -90,7 +90,7 @@ namespace ChessChallenge.Application
 
             Raylib.InitWindow(screenWidth, screenHeight, "Chess AI");
             Raylib.SetWindowState(ConfigFlags.FLAG_WINDOW_RESIZABLE | ConfigFlags.FLAG_WINDOW_ALWAYS_RUN);
-            Raylib.SetWindowMinSize(800, 600); // Minimum size to keep UI usable
+            Raylib.SetWindowMinSize(800, 600);
             Raylib.SetTargetFPS(60);
 
             AudioManager.Instance.Initialize();
