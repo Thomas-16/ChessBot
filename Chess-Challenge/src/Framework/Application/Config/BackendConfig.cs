@@ -8,8 +8,6 @@ namespace ChessChallenge.Application.Config
         public string ApiBaseUrl { get; set; } = "https://chessbot-oylr.onrender.com";
         public bool EnableBackendIntegration { get; set; } = true;
         public int TimeoutSeconds { get; set; } = 30;
-        public int RetryAttempts { get; set; } = 3;
-        public int RetryDelayMs { get; set; } = 1000;
 
         public static BackendConfig LoadFromConfiguration(IConfiguration? configuration)
         {
@@ -38,6 +36,6 @@ namespace ChessChallenge.Application.Config
         }
 
         public string GetHealthCheckUrl() => $"{ApiBaseUrl.TrimEnd('/')}/health/ready";
-        public string GetStartGameUrl() => $"{ApiBaseUrl.TrimEnd('/')}/chesshub";
+        public string GetSignalRHubUrl() => $"{ApiBaseUrl.TrimEnd('/')}/chesshub";
     }
 }

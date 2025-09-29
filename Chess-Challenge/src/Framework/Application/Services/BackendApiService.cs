@@ -1,7 +1,5 @@
 using System;
 using System.Net.Http;
-using System.Text;
-using System.Text.Json;
 using System.Threading.Tasks;
 using ChessChallenge.Application.Config;
 using static ChessChallenge.Application.ConsoleHelper;
@@ -11,14 +9,15 @@ namespace ChessChallenge.Application.Services
     public class BackendApiService
     {
         private readonly HttpClient _httpClient;
+        private readonly SignalRService _signalRService;
         private readonly BackendConfig _config;
-        private bool _isConnected = false;
 
-        public bool IsConnected => _isConnected;
+        public bool IsConnected => _signalRService.IsConnected;
 
-        public BackendApiService(HttpClient httpClient, BackendConfig config)
+        public BackendApiService(HttpClient httpClient, SignalRService signalRService, BackendConfig config)
         {
             _httpClient = httpClient;
+            _signalRService = signalRService;
             _config = config;
             _httpClient.Timeout = TimeSpan.FromSeconds(_config.TimeoutSeconds);
         }
@@ -27,105 +26,33 @@ namespace ChessChallenge.Application.Services
         {
             if (!_config.EnableBackendIntegration)
             {
-                _isConnected = false;
                 return false;
             }
 
-            try
-            {
-                var response = await _httpClient.GetAsync(_config.GetHealthCheckUrl());
-                _isConnected = response.IsSuccessStatusCode;
-
-                if (_isConnected)
-                {
-                    Log("✅ Backend connection established", false, ConsoleColor.Green);
-                }
-                else
-                {
-                    Log($"⚠️ Backend health check failed: {response.StatusCode}", false, ConsoleColor.Yellow);
-                }
-
-                return _isConnected;
-            }
-            catch (Exception ex)
-            {
-                _isConnected = false;
-                Log($"⚠️ Backend connection failed: {ex.Message}", false, ConsoleColor.Yellow);
-                return false;
-            }
+            // Use SignalR connection
+            return await _signalRService.ConnectAsync();
         }
 
         public async Task<string?> StartNewGameAsync()
         {
-            if (!_config.EnableBackendIntegration || !_isConnected)
+            if (!_config.EnableBackendIntegration || !IsConnected)
             {
                 return null;
             }
 
-            for (int attempt = 0; attempt < _config.RetryAttempts; attempt++)
-            {
-                try
-                {
-                    // For now, we'll use simple HTTP calls since SignalR integration would be more complex
-                    // Generate a simple game ID locally for this initial implementation
-                    var gameId = Guid.NewGuid().ToString();
-                    Log($"🎮 Started new game session: {gameId}", false, ConsoleColor.Blue);
-                    return gameId;
-                }
-                catch (Exception ex)
-                {
-                    Log($"❌ Failed to start game session (attempt {attempt + 1}): {ex.Message}", false, ConsoleColor.Red);
-
-                    if (attempt < _config.RetryAttempts - 1)
-                    {
-                        await Task.Delay(_config.RetryDelayMs);
-                    }
-                }
-            }
-
-            return null;
+            // Use SignalR hub method
+            return await _signalRService.StartNewGameAsync();
         }
 
         public async Task<bool> SaveGameResultAsync(string gameId, string pgn, string result)
         {
-            if (!_config.EnableBackendIntegration || !_isConnected || string.IsNullOrEmpty(gameId))
+            if (!_config.EnableBackendIntegration || !IsConnected || string.IsNullOrEmpty(gameId))
             {
                 return false;
             }
 
-            for (int attempt = 0; attempt < _config.RetryAttempts; attempt++)
-            {
-                try
-                {
-                    var gameData = new
-                    {
-                        gameId = gameId,
-                        pgn = pgn,
-                        result = result,
-                        timestamp = DateTime.UtcNow
-                    };
-
-                    var jsonContent = JsonSerializer.Serialize(gameData);
-                    var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-                    // For now, just log the game data since SignalR integration would require more setup
-                    Log($"💾 Game completed: {gameId} | Result: {result}", false, ConsoleColor.Blue);
-                    // Log($"📝 PGN: {pgn.Substring(0, Math.Min(100, pgn.Length))}...", false, ConsoleColor.Gray);
-
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    Log($"❌ Failed to save game result (attempt {attempt + 1}): {ex.Message}", false, ConsoleColor.Red);
-
-                    if (attempt < _config.RetryAttempts - 1)
-                    {
-                        await Task.Delay(_config.RetryDelayMs);
-                    }
-                }
-            }
-
-            return false;
+            // Use SignalR hub method
+            return await _signalRService.SaveGameResultAsync(gameId, pgn, result);
         }
     }
 }

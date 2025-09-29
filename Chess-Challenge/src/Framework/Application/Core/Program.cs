@@ -54,6 +54,7 @@ namespace ChessChallenge.Application
                 // Setup dependency injection
                 var services = new ServiceCollection();
                 services.AddSingleton(backendConfig);
+                services.AddSingleton<SignalRService>();
                 services.AddHttpClient<BackendApiService>();
                 services.AddSingleton<GameStorageService>();
 
