@@ -40,10 +40,14 @@ builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database", failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded)
     .AddCheck("api", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), new[] { "api" });
 
-// Logging
+// Logging configuration
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
+
+// Reduce health check logging noise
+builder.Logging.AddFilter("Chess_Backend.Services.DatabaseHealthCheck", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.Extensions.Diagnostics.HealthChecks", LogLevel.Warning);
 
 var app = builder.Build();
 

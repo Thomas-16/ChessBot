@@ -25,7 +25,8 @@ public class DatabaseHealthCheck : IHealthCheck
 
             await _context.Database.CanConnectAsync(timeoutCts.Token);
 
-            _logger.LogInformation("Database health check passed");
+            // Only log success at Debug level to reduce noise
+            _logger.LogDebug("Database health check passed");
             return HealthCheckResult.Healthy("Database connection successful");
         }
         catch (OperationCanceledException)
