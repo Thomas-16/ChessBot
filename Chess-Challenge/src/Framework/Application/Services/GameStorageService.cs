@@ -10,9 +10,6 @@ namespace ChessChallenge.Application.Services
         private readonly BackendApiService _backendApi;
         private string? _currentGameId;
 
-        public string? CurrentGameId => _currentGameId;
-        public bool HasActiveGame => !string.IsNullOrEmpty(_currentGameId);
-
         public GameStorageService(BackendApiService backendApi)
         {
             _backendApi = backendApi;

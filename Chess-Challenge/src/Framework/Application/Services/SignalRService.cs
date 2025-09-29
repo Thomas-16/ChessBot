@@ -10,11 +10,10 @@ namespace ChessChallenge.Application.Services
     {
         private readonly BackendConfig _config;
         private HubConnection? _connection;
-        private bool _isConnected = false;
-        private bool _isConnecting = false;
+        private bool _isConnected;
+        private bool _isConnecting;
 
         public bool IsConnected => _isConnected;
-        public bool IsConnecting => _isConnecting;
 
         public SignalRService(BackendConfig config)
         {
@@ -112,20 +111,6 @@ namespace ChessChallenge.Application.Services
             {
                 Log($"❌ Failed to save game: {ex.Message}", false, ConsoleColor.Red);
                 return false;
-            }
-        }
-
-        public async Task DisconnectAsync()
-        {
-            if (_connection != null)
-            {
-                Log("🔌 Disconnecting from SignalR hub...", false, ConsoleColor.Cyan);
-                await _connection.StopAsync();
-                await _connection.DisposeAsync();
-                _connection = null;
-                _isConnected = false;
-                _isConnecting = false;
-                Log("📴 SignalR disconnected", false, ConsoleColor.Gray);
             }
         }
 
