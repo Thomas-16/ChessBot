@@ -34,8 +34,5 @@ namespace ChessChallenge.Application.Config
 
             return config;
         }
-
-        public string GetHealthCheckUrl() => $"{ApiBaseUrl.TrimEnd('/')}/health/ready";
-        public string GetSignalRHubUrl() => $"{ApiBaseUrl.TrimEnd('/')}/chesshub";
     }
 }
