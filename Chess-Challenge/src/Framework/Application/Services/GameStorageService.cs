@@ -82,6 +82,13 @@ namespace ChessChallenge.Application.Services
                 string pgn = PGNCreator.CreatePGN(board, result, whiteName, blackName);
                 string resultString = ConvertGameResultToString(result);
 
+                if (string.IsNullOrWhiteSpace(pgn))
+                {
+                    Log($"Not saving to game to backend, pgn is empty");
+                    _currentGameId = null;
+                    return true;
+                }
+                    
                 bool success = await _backendApi.SaveGameResultAsync(_currentGameId, pgn, resultString);
 
                 if (success)
