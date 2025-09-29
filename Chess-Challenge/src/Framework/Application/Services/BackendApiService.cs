@@ -44,6 +44,16 @@ namespace ChessChallenge.Application.Services
             return await _signalRService.StartNewGameAsync();
         }
 
+        public async Task DisconnectAsync()
+        {
+            if (!_config.EnableBackendIntegration || !IsConnected)
+            {
+                return;
+            }
+            
+            await _signalRService.DisconnectAsync();
+        }
+
         public async Task<bool> SaveGameResultAsync(string gameId, string pgn, string result)
         {
             if (!_config.EnableBackendIntegration || !IsConnected || string.IsNullOrEmpty(gameId))

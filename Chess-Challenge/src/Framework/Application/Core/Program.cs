@@ -157,6 +157,7 @@ namespace ChessChallenge.Application
             controller.Release();
             UIHelper.Release();
             AudioManager.Instance.Cleanup();
+            GameStorage?.DisconnectAsync();
         }
 
 

@@ -124,7 +124,6 @@ namespace ChessChallenge.Application.Services
                 _connection = null;
                 _isConnected = false;
                 _isConnecting = false;
-                Log("📴 SignalR disconnected", false, ConsoleColor.Gray);
             }
         }
 

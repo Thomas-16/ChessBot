@@ -105,6 +105,18 @@ namespace ChessChallenge.Application.Services
             }
         }
 
+        public async Task DisconnectAsync()
+        {
+            try
+            {
+                await _backendApi.DisconnectAsync();
+            }
+            catch (Exception ex)
+            {
+                Log($"Error disconnecting");
+            }
+        }
+
         public void ClearCurrentGame()
         {
             _currentGameId = null;
