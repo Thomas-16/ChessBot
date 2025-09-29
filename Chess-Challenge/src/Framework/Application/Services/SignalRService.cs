@@ -114,6 +114,20 @@ namespace ChessChallenge.Application.Services
             }
         }
 
+        public async Task DisconnectAsync()
+        {
+            if (_connection != null)
+            {
+                Log("🔌 Disconnecting from SignalR hub...", false, ConsoleColor.Cyan);
+                await _connection.StopAsync();
+                await _connection.DisposeAsync();
+                _connection = null;
+                _isConnected = false;
+                _isConnecting = false;
+                Log("📴 SignalR disconnected", false, ConsoleColor.Gray);
+            }
+        }
+
         private Task OnDisconnected(Exception? exception)
         {
             _isConnected = false;
