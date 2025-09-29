@@ -317,27 +317,30 @@ namespace ChessChallenge.Application
                 pgns.AppendLine(pgn);
 
                 // Save game to backend
-                Log($"🔄 Attempting to save game to backend...", false, ConsoleColor.Cyan);
-                _ = Task.Run(async () =>
+                if (!PlayerWhite.IsBot || !PlayerBlack.IsBot)
                 {
-                    try
+                    Log($"🔄 Attempting to save game to backend...", false, ConsoleColor.Cyan);
+                    _ = Task.Run(async () =>
                     {
-                        if (gameStorage != null)
+                        try
                         {
-                            Log($"📤 Calling SaveGameAsync...", false, ConsoleColor.Yellow);
-                            await gameStorage.SaveGameAsync(board, result, GetPlayerName(PlayerWhite), GetPlayerName(PlayerBlack));
-                            Log($"✅ SaveGameAsync completed", false, ConsoleColor.Green);
+                            if (gameStorage != null)
+                            {
+                                Log($"📤 Calling SaveGameAsync...", false, ConsoleColor.Yellow);
+                                await gameStorage.SaveGameAsync(board, result, GetPlayerName(PlayerWhite), GetPlayerName(PlayerBlack));
+                                Log($"✅ SaveGameAsync completed", false, ConsoleColor.Green);
+                            }
+                            else
+                            {
+                                Log("❌ gameStorage is null", false, ConsoleColor.Red);
+                            }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            Log("❌ gameStorage is null", false, ConsoleColor.Red);
+                            Log($"❌ Error saving game: {ex.Message}", false, ConsoleColor.Red);
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"❌ Error saving game: {ex.Message}", false, ConsoleColor.Red);
-                    }
-                });
+                    });
+                }
 
                 // If 2 bots playing each other, start next game automatically.
                 if (PlayerWhite.IsBot && PlayerBlack.IsBot)
