@@ -121,6 +121,11 @@ namespace ChessChallenge.Application
             return new Vector2(x, y);
         }
 
+        public static Font GetFont()
+        {
+            return SDF_Enabled ? fontSdf : font;
+        }
+
         public static void Release()
         {
             Raylib.UnloadFont(font);

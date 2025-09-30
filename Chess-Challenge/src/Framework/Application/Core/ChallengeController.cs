@@ -57,6 +57,9 @@ namespace ChessChallenge.Application
         readonly int debugTokenCount;
         readonly StringBuilder pgns;
 
+        // UI
+        readonly ChatUI chatUI;
+
         // Backend integration
         readonly GameStorageService? gameStorage;
 
@@ -71,6 +74,7 @@ namespace ChessChallenge.Application
             boardUI = new BoardUI();
             board = new Board();
             pgns = new();
+            chatUI = new ChatUI();
 
             // Initialize backend integration
             gameStorage = Program.GameStorage;
@@ -427,6 +431,9 @@ namespace ChessChallenge.Application
                 }
             }
 
+            // Update chat UI
+            chatUI.Update();
+
             if (hasBotTaskException)
             {
                 hasBotTaskException = false;
@@ -445,7 +452,7 @@ namespace ChessChallenge.Application
         public void DrawOverlay()
         {
             MenuUI.DrawButtons(this);
-            MatchStatsUI.DrawMatchStats(this);
+            chatUI.Draw();
         }
 
         static string GetPlayerName(ChessPlayer player) => GetPlayerName(player.PlayerType);
