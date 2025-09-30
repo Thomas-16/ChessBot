@@ -298,7 +298,7 @@ namespace ChessChallenge.Application
         private void SendMessage()
         {
             string messageText = inputText.ToString().Trim();
-            if (string.IsNullOrEmpty(messageText)) return;
+            if (string.IsNullOrWhiteSpace(messageText)) return;
 
             // Add user message
             AddMessage("User", messageText, true);
