@@ -15,7 +15,7 @@ namespace ChessChallenge.Application
             float breakSpacing = spacing * 0.6f;
 
             // Game Buttons
-            if (NextButtonInRow(Program.SIMPLIFIED_MODE ? "Switch Sides" : "Human vs MainBot", ref buttonPos, spacing, buttonSize))
+            if (NextButtonInRow(Program.SIMPLIFIED_MODE ? "Start New Game" : "Human vs MainBot", ref buttonPos, spacing, buttonSize))
             {
                 var whiteType = controller.HumanWasWhiteLastGame ? ChallengeController.PlayerType.MyBot : ChallengeController.PlayerType.Human;
                 var blackType = !controller.HumanWasWhiteLastGame ? ChallengeController.PlayerType.MyBot : ChallengeController.PlayerType.Human;
