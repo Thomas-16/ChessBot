@@ -47,10 +47,15 @@ public class VoiceService
             };
 
             var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("xi-api-key", _elevenLabsApiKey);
 
-            var response = await _httpClient.PostAsync(url, content);
+            // Create request with headers
+            var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = content
+            };
+            request.Headers.Add("xi-api-key", _elevenLabsApiKey);
+
+            var response = await _httpClient.SendAsync(request);
 
             if (response.IsSuccessStatusCode)
             {
