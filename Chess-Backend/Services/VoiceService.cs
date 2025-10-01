@@ -55,6 +55,9 @@ public class VoiceService
             };
             request.Headers.Add("xi-api-key", _elevenLabsApiKey);
 
+            _logger.LogInformation("Calling ElevenLabs API with key length: {KeyLength}, key prefix: {KeyPrefix}",
+                _elevenLabsApiKey.Length, _elevenLabsApiKey.Substring(0, Math.Min(15, _elevenLabsApiKey.Length)));
+
             var response = await _httpClient.SendAsync(request);
 
             if (response.IsSuccessStatusCode)
@@ -66,7 +69,9 @@ public class VoiceService
             }
             else
             {
-                _logger.LogError("ElevenLabs TTS failed with status: {StatusCode}", response.StatusCode);
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogError("ElevenLabs TTS failed with status: {StatusCode}, response: {ErrorBody}",
+                    response.StatusCode, errorBody);
                 return Array.Empty<byte>();
             }
         }
