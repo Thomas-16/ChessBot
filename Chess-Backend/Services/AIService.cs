@@ -22,9 +22,9 @@ public class AIService
     {
         try
         {
-            var systemPrompt = "You are a witty chess opponent. Keep responses brief and chess-focused. " +
-                              "Be encouraging but competitive. Make occasional chess puns and references to chess strategy. " +
-                              "Keep responses under 100 words.";
+            var systemPrompt = "You are a witty chess opponent talking to a human that you're currently playing against. Keep responses brief and chess-focused. " +
+                              "Be encouraging but competitive. Make occasional references to chess strategy. " +
+                              "Keep responses under 4 sentences. Don't use emojis.";
 
             var messages = new List<ChatMessage>
             {
