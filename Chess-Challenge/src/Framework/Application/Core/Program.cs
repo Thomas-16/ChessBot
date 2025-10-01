@@ -42,17 +42,17 @@ namespace ChessChallenge.Application
             try
             {
                 // Build configuration
-                var configuration = new ConfigurationBuilder()
+                IConfigurationRoot? configuration = new ConfigurationBuilder()
                     .SetBasePath(Directory.GetCurrentDirectory())
                     .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
                     .AddEnvironmentVariables()
                     .Build();
 
                 // Load backend configuration
-                var backendConfig = BackendConfig.LoadFromConfiguration(configuration);
+                BackendConfig backendConfig = BackendConfig.LoadFromConfiguration(configuration);
 
                 // Setup dependency injection
-                var services = new ServiceCollection();
+                ServiceCollection services = new ServiceCollection();
                 services.AddSingleton(backendConfig);
                 services.AddSingleton<SignalRService>();
                 services.AddHttpClient<BackendApiService>();
@@ -73,7 +73,7 @@ namespace ChessChallenge.Application
         
         static void RunUCIMode()
         {
-            var uciEngine = new UCIEngine();
+            UCIEngine uciEngine = new UCIEngine();
             uciEngine.Run();
         }
         
@@ -109,7 +109,7 @@ namespace ChessChallenge.Application
                 {
                     try
                     {
-                        var connected = await GameStorage.InitializeConnectionAsync();
+                        bool connected = await GameStorage.InitializeConnectionAsync();
                         ConsoleHelper.Log($"🔗 Backend connection result: {connected}", false, connected ? ConsoleColor.Green : ConsoleColor.Yellow);
                     }
                     catch (Exception ex)

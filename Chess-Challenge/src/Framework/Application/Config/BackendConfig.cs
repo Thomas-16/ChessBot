@@ -11,22 +11,22 @@ namespace ChessChallenge.Application.Config
 
         public static BackendConfig LoadFromConfiguration(IConfiguration? configuration)
         {
-            var config = new BackendConfig();
+            BackendConfig config = new BackendConfig();
 
             if (configuration != null)
             {
-                var backendSection = configuration.GetSection("Backend");
+                IConfigurationSection? backendSection = configuration.GetSection("Backend");
                 backendSection.Bind(config);
             }
 
             // Override with environment variables if they exist
-            var envApiUrl = Environment.GetEnvironmentVariable("CHESS_BACKEND_URL");
+            string? envApiUrl = Environment.GetEnvironmentVariable("CHESS_BACKEND_URL");
             if (!string.IsNullOrEmpty(envApiUrl))
             {
                 config.ApiBaseUrl = envApiUrl;
             }
 
-            var envEnabled = Environment.GetEnvironmentVariable("CHESS_BACKEND_ENABLED");
+            string? envEnabled = Environment.GetEnvironmentVariable("CHESS_BACKEND_ENABLED");
             if (!string.IsNullOrEmpty(envEnabled) && bool.TryParse(envEnabled, out bool enabled))
             {
                 config.EnableBackendIntegration = enabled;
