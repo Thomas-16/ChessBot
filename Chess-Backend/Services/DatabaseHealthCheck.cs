@@ -20,7 +20,7 @@ public class DatabaseHealthCheck : IHealthCheck
         try
         {
             // Try to connect to the database with a timeout
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using CancellationTokenSource timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
 
             await _context.Database.CanConnectAsync(timeoutCts.Token);

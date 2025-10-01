@@ -25,7 +25,7 @@ public class ChessHub : Hub
     {
         try
         {
-            var game = new Game();
+            Game game = new Game();
             _context.Games.Add(game);
             await _context.SaveChangesAsync();
 
@@ -44,14 +44,14 @@ public class ChessHub : Hub
         try
         {
             // Validate game exists
-            var gameExists = await _context.Games.AnyAsync(g => g.Id == gameId);
+            bool gameExists = await _context.Games.AnyAsync(g => g.Id == gameId);
             if (!gameExists)
             {
                 throw new HubException("Game not found");
             }
 
             // Save user message
-            var userMessage = new ChatMessage
+            ChatMessage userMessage = new ChatMessage
             {
                 GameId = gameId,
                 Speaker = "User",
@@ -61,10 +61,10 @@ public class ChessHub : Hub
             _context.ChatMessages.Add(userMessage);
 
             // Get AI response
-            var aiResponse = await _aiService.GetChessResponseAsync(message, gameId);
+            string aiResponse = await _aiService.GetChessResponseAsync(message, gameId);
 
             // Save AI message
-            var aiMessage = new ChatMessage
+            ChatMessage aiMessage = new ChatMessage
             {
                 GameId = gameId,
                 Speaker = "AI",
@@ -76,8 +76,8 @@ public class ChessHub : Hub
             await _context.SaveChangesAsync();
 
             // Generate speech for AI response
-            var audioBytes = await _voiceService.TextToSpeechAsync(aiResponse);
-            var audioBase64 = Convert.ToBase64String(audioBytes);
+            byte[] audioBytes = await _voiceService.TextToSpeechAsync(aiResponse);
+            string audioBase64 = Convert.ToBase64String(audioBytes);
 
             // Send response back to client
             await Clients.Caller.SendAsync("ReceiveChatResponse", new
@@ -102,17 +102,17 @@ public class ChessHub : Hub
         try
         {
             // Validate game exists
-            var gameExists = await _context.Games.AnyAsync(g => g.Id == gameId);
+            bool gameExists = await _context.Games.AnyAsync(g => g.Id == gameId);
             if (!gameExists)
             {
                 throw new HubException("Game not found");
             }
 
             // Convert base64 to bytes
-            var audioBytes = Convert.FromBase64String(base64Audio);
+            byte[] audioBytes = Convert.FromBase64String(base64Audio);
 
             // Convert speech to text
-            var transcribedText = await _voiceService.SpeechToTextAsync(audioBytes);
+            string transcribedText = await _voiceService.SpeechToTextAsync(audioBytes);
 
             if (string.IsNullOrWhiteSpace(transcribedText))
             {
@@ -136,7 +136,7 @@ public class ChessHub : Hub
     {
         try
         {
-            var game = await _context.Games.FirstOrDefaultAsync(g => g.Id == gameId);
+            Game? game = await _context.Games.FirstOrDefaultAsync(g => g.Id == gameId);
             if (game == null)
             {
                 throw new HubException("Game not found");

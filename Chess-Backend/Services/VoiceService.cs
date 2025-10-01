@@ -1,3 +1,4 @@
+using System.ClientModel;
 using OpenAI.Audio;
 using System.Text;
 using System.Text.Json;
@@ -16,9 +17,9 @@ public class VoiceService
         _httpClient = httpClient;
         _logger = logger;
 
-        var openAiApiKey = configuration["OPENAI_API_KEY"] ??
-                          Environment.GetEnvironmentVariable("OPENAI_API_KEY") ??
-                          throw new InvalidOperationException("OpenAI API key not found.");
+        string openAiApiKey = configuration["OPENAI_API_KEY"] ??
+                              Environment.GetEnvironmentVariable("OPENAI_API_KEY") ??
+                              throw new InvalidOperationException("OpenAI API key not found.");
 
         _elevenLabsApiKey = configuration["ELEVENLABS_API_KEY"] ??
                            Environment.GetEnvironmentVariable("ELEVENLABS_API_KEY") ??
@@ -32,8 +33,8 @@ public class VoiceService
         try
         {
             // ElevenLabs text-to-speech API
-            var voiceId = "21m00Tcm4TlvDq8ikWAM"; // Rachel voice
-            var url = $"https://api.elevenlabs.io/v1/text-to-speech/{voiceId}";
+            string voiceId = "21m00Tcm4TlvDq8ikWAM"; // Rachel voice
+            string url = $"https://api.elevenlabs.io/v1/text-to-speech/{voiceId}";
 
             var payload = new
             {
@@ -46,27 +47,27 @@ public class VoiceService
                 }
             };
 
-            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            StringContent content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
             // Create request with headers
-            var request = new HttpRequestMessage(HttpMethod.Post, url)
+            HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url)
             {
                 Content = content
             };
             request.Headers.Add("xi-api-key", _elevenLabsApiKey);
 
-            var response = await _httpClient.SendAsync(request);
+            HttpResponseMessage response = await _httpClient.SendAsync(request);
 
             if (response.IsSuccessStatusCode)
             {
-                var audioBytes = await response.Content.ReadAsByteArrayAsync();
+                byte[] audioBytes = await response.Content.ReadAsByteArrayAsync();
                 _logger.LogInformation("Generated TTS audio for text: {Text} ({AudioSize} bytes)",
                     text.Substring(0, Math.Min(50, text.Length)), audioBytes.Length);
                 return audioBytes;
             }
             else
             {
-                var errorBody = await response.Content.ReadAsStringAsync();
+                string errorBody = await response.Content.ReadAsStringAsync();
                 _logger.LogError("ElevenLabs TTS failed with status: {StatusCode}, response: {ErrorBody}",
                     response.StatusCode, errorBody);
                 return Array.Empty<byte>();
@@ -84,11 +85,11 @@ public class VoiceService
         try
         {
             // Create a temporary stream from the audio data
-            using var audioStream = new MemoryStream(audioData);
+            using MemoryStream audioStream = new MemoryStream(audioData);
 
             // Use OpenAI Whisper for speech-to-text
-            var transcription = await _audioClient.TranscribeAudioAsync(audioStream, "audio.wav");
-            var text = transcription.Value.Text;
+            ClientResult<AudioTranscription>? transcription = await _audioClient.TranscribeAudioAsync(audioStream, "audio.wav");
+            string? text = transcription.Value.Text;
 
             _logger.LogInformation("Transcribed audio ({AudioSize} bytes) to text: {Text}",
                 audioData.Length, text);

@@ -1,3 +1,4 @@
+using System.ClientModel;
 using OpenAI.Chat;
 using System.Collections.Generic;
 
@@ -10,9 +11,9 @@ public class AIService
 
     public AIService(IConfiguration configuration, ILogger<AIService> logger)
     {
-        var apiKey = configuration["OPENAI_API_KEY"] ??
-                    Environment.GetEnvironmentVariable("OPENAI_API_KEY") ??
-                    throw new InvalidOperationException("OpenAI API key not found. Set OPENAI_API_KEY environment variable.");
+        string apiKey = configuration["OPENAI_API_KEY"] ??
+                        Environment.GetEnvironmentVariable("OPENAI_API_KEY") ??
+                        throw new InvalidOperationException("OpenAI API key not found. Set OPENAI_API_KEY environment variable.");
 
         _chatClient = new ChatClient("gpt-4o-mini", apiKey);
         _logger = logger;
@@ -22,18 +23,18 @@ public class AIService
     {
         try
         {
-            var systemPrompt = "You are a witty chess opponent talking to a human that you're currently playing against. Keep responses brief and chess-focused. " +
-                              "Be encouraging but competitive. Make occasional references to chess strategy. " +
-                              "Keep responses under 4 sentences. Don't use emojis.";
+            string systemPrompt = "You are a witty chess opponent talking to a human that you're currently playing against. Keep responses brief and chess-focused. " +
+                                  "Be encouraging but competitive. Make occasional references to chess strategy. " +
+                                  "Keep responses under 4 sentences. Don't use emojis.";
 
-            var messages = new List<ChatMessage>
+            List<ChatMessage> messages = new List<ChatMessage>
             {
                 new SystemChatMessage(systemPrompt),
                 new UserChatMessage($"Game {gameId}: {userMessage}")
             };
 
-            var completion = await _chatClient.CompleteChatAsync(messages);
-            var response = completion.Value.Content[0].Text ?? "I'm having trouble thinking right now. Let's focus on the game!";
+            ClientResult<ChatCompletion>? completion = await _chatClient.CompleteChatAsync(messages);
+            string response = completion.Value.Content[0].Text ?? "I'm having trouble thinking right now. Let's focus on the game!";
 
             _logger.LogInformation("Generated AI response for game {GameId}: {Response}", gameId, response);
             return response;

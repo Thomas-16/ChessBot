@@ -3,10 +3,10 @@ using Chess_Backend.Hubs;
 using Chess_Backend.Services;
 using Microsoft.EntityFrameworkCore;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Configure port for Render hosting
-var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+string port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
 builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
 // Add services to the container
@@ -25,7 +25,7 @@ builder.Services.AddCors(options =>
 });
 
 // Configure PostgreSQL database
-var connectionString = GetConnectionString(builder.Configuration);
+string connectionString = GetConnectionString(builder.Configuration);
 builder.Services.AddDbContext<ChessDbContext>(options =>
     options.UseNpgsql(connectionString));
 
@@ -42,7 +42,7 @@ builder.Services.AddHealthChecks()
 
 // Logging - configuration comes from appsettings.json
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
@@ -68,15 +68,15 @@ app.MapGet("/", () => "Chess Backend API is running!");
 // Ensure database is created (only if database is available)
 try
 {
-    using (var scope = app.Services.CreateScope())
+    using (IServiceScope scope = app.Services.CreateScope())
     {
-        var context = scope.ServiceProvider.GetRequiredService<ChessDbContext>();
+        ChessDbContext context = scope.ServiceProvider.GetRequiredService<ChessDbContext>();
         context.Database.EnsureCreated();
     }
 }
 catch (Exception ex)
 {
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    ILogger<Program> logger = app.Services.GetRequiredService<ILogger<Program>>();
     logger.LogWarning(ex, "Could not connect to database. Continuing without database initialization...");
 }
 
@@ -85,18 +85,18 @@ app.Run();
 // Helper method to parse DATABASE_URL for Render
 static string GetConnectionString(IConfiguration configuration)
 {
-    var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+    string? databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
 
     if (!string.IsNullOrEmpty(databaseUrl))
     {
         try
         {
             // Parse Render DATABASE_URL format: postgres://user:password@host:port/database
-            var uri = new Uri(databaseUrl);
-            var userInfo = uri.UserInfo.Split(':');
-            var port = uri.Port != -1 ? uri.Port : 5432; // Default PostgreSQL port if not specified
+            Uri uri = new Uri(databaseUrl);
+            string[] userInfo = uri.UserInfo.Split(':');
+            int port = uri.Port != -1 ? uri.Port : 5432; // Default PostgreSQL port if not specified
 
-            var connectionString = $"Host={uri.Host};Port={port};Database={uri.LocalPath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true;Include Error Detail=true;";
+            string connectionString = $"Host={uri.Host};Port={port};Database={uri.LocalPath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true;Include Error Detail=true;";
 
             Console.WriteLine($"Parsed connection string: Host={uri.Host};Port={port};Database={uri.LocalPath.TrimStart('/')};Username={userInfo[0]};Password=***;SSL Mode=Require;Trust Server Certificate=true;");
             return connectionString;
