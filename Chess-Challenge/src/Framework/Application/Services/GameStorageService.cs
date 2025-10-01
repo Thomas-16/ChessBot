@@ -18,7 +18,7 @@ namespace ChessChallenge.Application.Services
         public async Task<bool> InitializeConnectionAsync()
         {
             Log("🔌 Initializing backend connection...", false, ConsoleColor.Cyan);
-            var connected = await _backendApi.CheckConnectionAsync();
+            bool connected = await _backendApi.CheckConnectionAsync();
 
             // If we have no current game but connection just established, try to start a new session
             if (connected && string.IsNullOrEmpty(_currentGameId))
@@ -127,6 +127,11 @@ namespace ChessChallenge.Application.Services
         public void ClearCurrentGame()
         {
             _currentGameId = null;
+        }
+
+        public string? GetCurrentGameId()
+        {
+            return _currentGameId;
         }
 
         private static string ConvertGameResultToString(GameResult result)

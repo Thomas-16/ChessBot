@@ -3,7 +3,10 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Text;
+using System.Text.Json;
 using ChessChallenge.Application.Models;
+using ChessChallenge.Application.Services;
+using static ChessChallenge.Application.ConsoleHelper;
 
 namespace ChessChallenge.Application
 {
@@ -15,6 +18,23 @@ namespace ChessChallenge.Application
         private float scrollOffset = 0f;
         private bool inputBoxFocused = false;
 
+        // Backend integration
+        private readonly GameStorageService? gameStorage;
+        private readonly BackendApiService? backendApi;
+        private readonly AudioService? audioService;
+
+        // Typing effect
+        private float lastTypingUpdate = 0f;
+        private const float TypingSpeed = 0.03f; // seconds per character
+
+        // Timeout tracking
+        private ChatMessage? pendingResponseMessage = null;
+        private float pendingResponseStartTime = 0f;
+        private const float ResponseTimeout = 10f; // seconds
+
+        // Request timing
+        private DateTime? lastRequestSentTime = null;
+
         // Layout constants (reference 1920x1080)
         private readonly Vector2 panelPos = new(1420, 150);
         private readonly Vector2 panelSize = new(450, 800);
@@ -23,8 +43,19 @@ namespace ChessChallenge.Application
         private readonly float messagePadding = 10f;
         private readonly float bubblePadding = 12f;
 
-        public ChatUI()
+        public ChatUI(GameStorageService? gameStorage = null, BackendApiService? backendApi = null, AudioService? audioService = null)
         {
+            this.gameStorage = gameStorage;
+            this.backendApi = backendApi;
+            this.audioService = audioService;
+
+            // Register backend handlers if available
+            if (backendApi != null)
+            {
+                backendApi.RegisterChatResponseHandler(OnReceiveChatResponse);
+                backendApi.RegisterChatErrorHandler(OnChatError);
+            }
+
             // Add a welcome message from AI
             AddMessage("AI", "Hey! Ready to play some chess?", false);
         }
@@ -46,6 +77,53 @@ namespace ChessChallenge.Application
         {
             HandleInputBoxClick();
             HandleKeyboardInput();
+            UpdateTypingEffect();
+            CheckResponseTimeout();
+        }
+
+        private void UpdateTypingEffect()
+        {
+            float currentTime = (float)Raylib.GetTime();
+
+            foreach (ChatMessage message in messages)
+            {
+                if (message.IsTyping && !message.IsFromUser)
+                {
+                    if (currentTime - lastTypingUpdate >= TypingSpeed)
+                    {
+                        message.VisibleCharCount++;
+                        lastTypingUpdate = currentTime;
+
+                        // Stop typing when all characters are visible
+                        if (message.VisibleCharCount >= message.Message.Length)
+                        {
+                            message.IsTyping = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        private void CheckResponseTimeout()
+        {
+            if (pendingResponseMessage != null)
+            {
+                float currentTime = (float)Raylib.GetTime();
+                if (currentTime - pendingResponseStartTime >= ResponseTimeout)
+                {
+                    Log("⏱️ Chat response timeout - no response from backend", false, ConsoleColor.Yellow);
+
+                    // Replace placeholder with error message
+                    if (messages.Contains(pendingResponseMessage))
+                    {
+                        pendingResponseMessage.Message = "Error responding right now.";
+                        pendingResponseMessage.IsPlaceholder = false;
+                        pendingResponseMessage.IsTyping = false;
+                    }
+
+                    pendingResponseMessage = null;
+                }
+            }
         }
 
         public void Draw()
@@ -58,11 +136,11 @@ namespace ChessChallenge.Application
 
         private void DrawChatPanel()
         {
-            var scaledPos = UIHelper.Scale(panelPos);
-            var scaledSize = UIHelper.Scale(panelSize);
+            Vector2 scaledPos = UIHelper.Scale(panelPos);
+            Vector2 scaledSize = UIHelper.Scale(panelSize);
 
             // Semi-transparent dark background
-            var panelRect = new Rectangle(scaledPos.X, scaledPos.Y, scaledSize.X, scaledSize.Y);
+            Rectangle panelRect = new Rectangle(scaledPos.X, scaledPos.Y, scaledSize.X, scaledSize.Y);
             Raylib.DrawRectangleRec(panelRect, new Color(30, 30, 30, 200));
 
             // Border
@@ -71,16 +149,16 @@ namespace ChessChallenge.Application
 
         private void DrawChatHeader()
         {
-            var scaledPos = UIHelper.Scale(panelPos);
-            var scaledSize = UIHelper.Scale(panelSize);
-            var scaledHeaderHeight = UIHelper.Scale(headerHeight);
+            Vector2 scaledPos = UIHelper.Scale(panelPos);
+            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            float scaledHeaderHeight = UIHelper.Scale(headerHeight);
 
             // Header background
-            var headerRect = new Rectangle(scaledPos.X, scaledPos.Y, scaledSize.X, scaledHeaderHeight);
+            Rectangle headerRect = new Rectangle(scaledPos.X, scaledPos.Y, scaledSize.X, scaledHeaderHeight);
             Raylib.DrawRectangleRec(headerRect, new Color(40, 40, 40, 255));
 
             // Header text
-            var headerCenter = new Vector2(scaledPos.X + scaledSize.X / 2, scaledPos.Y + scaledHeaderHeight / 2);
+            Vector2 headerCenter = new Vector2(scaledPos.X + scaledSize.X / 2, scaledPos.Y + scaledHeaderHeight / 2);
             int headerFontSize = UIHelper.ScaleInt(32);
             UIHelper.DrawText("Chat with AI Bot", headerCenter, headerFontSize, 1, Color.WHITE, UIHelper.AlignH.Centre, UIHelper.AlignV.Centre);
 
@@ -94,11 +172,11 @@ namespace ChessChallenge.Application
 
         private void DrawMessages()
         {
-            var scaledPos = UIHelper.Scale(panelPos);
-            var scaledSize = UIHelper.Scale(panelSize);
-            var scaledHeaderHeight = UIHelper.Scale(headerHeight);
-            var scaledInputHeight = UIHelper.Scale(inputHeight);
-            var scaledPadding = UIHelper.Scale(messagePadding);
+            Vector2 scaledPos = UIHelper.Scale(panelPos);
+            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            float scaledHeaderHeight = UIHelper.Scale(headerHeight);
+            float scaledInputHeight = UIHelper.Scale(inputHeight);
+            float scaledPadding = UIHelper.Scale(messagePadding);
 
             // Message area bounds
             float messageAreaY = scaledPos.Y + scaledHeaderHeight + scaledPadding;
@@ -116,7 +194,7 @@ namespace ChessChallenge.Application
 
             float currentY = messageAreaY + scrollOffset;
 
-            foreach (var message in messages)
+            foreach (ChatMessage message in messages)
             {
                 currentY = DrawMessageBubble(message, messageAreaX, currentY, messageAreaWidth);
                 currentY += scaledPadding;
@@ -129,11 +207,14 @@ namespace ChessChallenge.Application
         {
             int fontSize = UIHelper.ScaleInt(24);
             int senderFontSize = UIHelper.ScaleInt(18);
-            var scaledBubblePadding = UIHelper.Scale(bubblePadding);
+            float scaledBubblePadding = UIHelper.Scale(bubblePadding);
+
+            // Get visible message (with typing effect)
+            string displayMessage = message.GetVisibleMessage();
 
             // Measure text to determine bubble size
             float maxBubbleWidth = areaWidth * 0.7f;
-            string wrappedText = WrapText(message.Message, fontSize, maxBubbleWidth - scaledBubblePadding * 2);
+            string wrappedText = WrapText(displayMessage, fontSize, maxBubbleWidth - scaledBubblePadding * 2);
             Vector2 textSize = Raylib.MeasureTextEx(UIHelper.GetFont(), wrappedText, fontSize, 1);
 
             float bubbleWidth = textSize.X + scaledBubblePadding * 2;
@@ -145,7 +226,7 @@ namespace ChessChallenge.Application
                 : areaX;
 
             // Draw sender name
-            var senderPos = new Vector2(bubbleX, startY);
+            Vector2 senderPos = new Vector2(bubbleX, startY);
             Color senderColor = message.IsFromUser ? new Color(100, 150, 255, 255) : new Color(150, 150, 150, 255);
             string sender = message.IsFromUser ? "You" : "AI Bot";
             UIHelper.DrawText(sender, senderPos, senderFontSize, 1, senderColor, UIHelper.AlignH.Left, UIHelper.AlignV.Top);
@@ -153,14 +234,14 @@ namespace ChessChallenge.Application
             float bubbleY = startY + senderFontSize + UIHelper.Scale(4);
 
             // Draw bubble background
-            var bubbleRect = new Rectangle(bubbleX, bubbleY, bubbleWidth, bubbleHeight - senderFontSize - UIHelper.Scale(4));
+            Rectangle bubbleRect = new Rectangle(bubbleX, bubbleY, bubbleWidth, bubbleHeight - senderFontSize - UIHelper.Scale(4));
             Color bubbleColor = message.IsFromUser
                 ? new Color(50, 100, 200, 255)
                 : new Color(60, 60, 60, 255);
             Raylib.DrawRectangleRounded(bubbleRect, 0.2f, 8, bubbleColor);
 
             // Draw message text
-            var textPos = new Vector2(bubbleX + scaledBubblePadding, bubbleY + scaledBubblePadding);
+            Vector2 textPos = new Vector2(bubbleX + scaledBubblePadding, bubbleY + scaledBubblePadding);
             UIHelper.DrawText(wrappedText, textPos, fontSize, 1, Color.WHITE, UIHelper.AlignH.Left, UIHelper.AlignV.Top);
 
             return startY + bubbleHeight;
@@ -168,10 +249,10 @@ namespace ChessChallenge.Application
 
         private void DrawInputBox()
         {
-            var scaledPos = UIHelper.Scale(panelPos);
-            var scaledSize = UIHelper.Scale(panelSize);
-            var scaledInputHeight = UIHelper.Scale(inputHeight);
-            var scaledPadding = UIHelper.Scale(messagePadding);
+            Vector2 scaledPos = UIHelper.Scale(panelPos);
+            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            float scaledInputHeight = UIHelper.Scale(inputHeight);
+            float scaledPadding = UIHelper.Scale(messagePadding);
 
             float inputY = scaledPos.Y + scaledSize.Y - scaledInputHeight - scaledPadding;
             float inputX = scaledPos.X + scaledPadding;
@@ -180,7 +261,7 @@ namespace ChessChallenge.Application
             float sendButtonX = inputX + inputWidth + scaledPadding;
 
             // Input box background
-            var inputRect = new Rectangle(inputX, inputY, inputWidth, scaledInputHeight);
+            Rectangle inputRect = new Rectangle(inputX, inputY, inputWidth, scaledInputHeight);
             Color inputBgColor = inputBoxFocused
                 ? new Color(50, 50, 50, 255)
                 : new Color(40, 40, 40, 255);
@@ -189,7 +270,7 @@ namespace ChessChallenge.Application
 
             // Input text or placeholder
             int fontSize = UIHelper.ScaleInt(24);
-            var textPos = new Vector2(inputX + UIHelper.Scale(12), inputY + scaledInputHeight / 2);
+            Vector2 textPos = new Vector2(inputX + UIHelper.Scale(12), inputY + scaledInputHeight / 2);
             string displayText = inputText.Length > 0 ? inputText.ToString() : "Type message...";
             Color textColor = inputText.Length > 0 ? Color.WHITE : new Color(120, 120, 120, 255);
             UIHelper.DrawText(displayText, textPos, fontSize, 1, textColor, UIHelper.AlignH.Left, UIHelper.AlignV.Centre);
@@ -212,7 +293,7 @@ namespace ChessChallenge.Application
 
         private void DrawSendButton(float x, float y, float width, float height)
         {
-            var buttonRect = new Rectangle(x, y, width, height);
+            Rectangle buttonRect = new Rectangle(x, y, width, height);
             bool mouseOver = MouseInRect(buttonRect);
             bool canSend = inputText.Length > 0;
 
@@ -237,7 +318,7 @@ namespace ChessChallenge.Application
             Raylib.DrawRectangleRounded(buttonRect, 0.2f, 8, buttonColor);
 
             // Send icon (triangle/arrow)
-            var center = new Vector2(x + width / 2, y + height / 2);
+            Vector2 center = new Vector2(x + width / 2, y + height / 2);
             int fontSize = UIHelper.ScaleInt(28);
             UIHelper.DrawText(">", center, fontSize, 1, Color.WHITE, UIHelper.AlignH.Centre, UIHelper.AlignV.Centre);
 
@@ -250,16 +331,16 @@ namespace ChessChallenge.Application
 
         private void HandleInputBoxClick()
         {
-            var scaledPos = UIHelper.Scale(panelPos);
-            var scaledSize = UIHelper.Scale(panelSize);
-            var scaledInputHeight = UIHelper.Scale(inputHeight);
-            var scaledPadding = UIHelper.Scale(messagePadding);
+            Vector2 scaledPos = UIHelper.Scale(panelPos);
+            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            float scaledInputHeight = UIHelper.Scale(inputHeight);
+            float scaledPadding = UIHelper.Scale(messagePadding);
 
             float inputY = scaledPos.Y + scaledSize.Y - scaledInputHeight - scaledPadding;
             float inputX = scaledPos.X + scaledPadding;
             float inputWidth = scaledSize.X - scaledPadding * 2 - UIHelper.Scale(70);
 
-            var inputRect = new Rectangle(inputX, inputY, inputWidth, scaledInputHeight);
+            Rectangle inputRect = new Rectangle(inputX, inputY, inputWidth, scaledInputHeight);
 
             if (Raylib.IsMouseButtonPressed(MouseButton.MOUSE_BUTTON_LEFT))
             {
@@ -295,7 +376,7 @@ namespace ChessChallenge.Application
             }
         }
 
-        private void SendMessage()
+        private async void SendMessage()
         {
             string messageText = inputText.ToString().Trim();
             if (string.IsNullOrWhiteSpace(messageText)) return;
@@ -306,18 +387,129 @@ namespace ChessChallenge.Application
             // Clear input
             inputText.Clear();
 
-            // TODO: Send message to backend here
-            // For now, just log it
-            ConsoleHelper.Log($"[Chat] User sent: {messageText}", false, ConsoleColor.Cyan);
+            // Send to backend if available
+            if (backendApi != null && gameStorage != null)
+            {
+                string? gameId = gameStorage.GetCurrentGameId();
+
+                if (string.IsNullOrEmpty(gameId))
+                {
+                    Log("⚠️ No active game session - cannot send chat message", false, ConsoleColor.Yellow);
+                    AddMessage("System", "Cannot chat - no active game session", false);
+                    return;
+                }
+
+                // Add placeholder "..." message for AI
+                ChatMessage placeholderMessage = new ChatMessage("AI", "...", false, isPlaceholder: true);
+                messages.Add(placeholderMessage);
+                scrollOffset = 0f;
+
+                // Start timeout tracking and timing
+                pendingResponseMessage = placeholderMessage;
+                pendingResponseStartTime = (float)Raylib.GetTime();
+                lastRequestSentTime = DateTime.UtcNow;
+
+                // Send message to backend
+                bool success = await backendApi.SendChatMessageAsync(gameId, messageText);
+
+                if (!success)
+                {
+                    // Remove placeholder on failure
+                    messages.Remove(placeholderMessage);
+                    pendingResponseMessage = null;
+                    AddMessage("System", "Failed to send message - backend not connected", false);
+                }
+            }
+            else
+            {
+                Log($"[Chat] User sent: {messageText} (backend not configured)", false, ConsoleColor.Cyan);
+            }
+        }
+
+        private void OnReceiveChatResponse(object response)
+        {
+            try
+            {
+                // Clear timeout tracking since we got a response
+                pendingResponseMessage = null;
+
+                // Calculate response time
+                double responseTimeMs = 0;
+                if (lastRequestSentTime.HasValue)
+                {
+                    responseTimeMs = (DateTime.UtcNow - lastRequestSentTime.Value).TotalMilliseconds;
+                    lastRequestSentTime = null;
+                }
+
+                // Parse response JSON
+                JsonElement jsonElement = (JsonElement)response;
+                string message = jsonElement.GetProperty("message").GetString() ?? "No response";
+                string? audioBase64 = jsonElement.TryGetProperty("audio", out JsonElement audioProp) ? audioProp.GetString() : null;
+
+                Log($"💬 Received AI response ({responseTimeMs:F0}ms): {message}", false, ConsoleColor.Green);
+
+                // Find and replace placeholder message
+                int placeholderIndex = messages.FindIndex(m => m.IsPlaceholder);
+                if (placeholderIndex >= 0)
+                {
+                    messages.RemoveAt(placeholderIndex);
+                }
+
+                // Add AI response with typing effect
+                ChatMessage aiMessage = new ChatMessage("AI", message, false)
+                {
+                    IsTyping = true,
+                    VisibleCharCount = 0,
+                    AudioBase64 = audioBase64
+                };
+                messages.Add(aiMessage);
+                lastTypingUpdate = (float)Raylib.GetTime();
+
+                // Play audio if available
+                if (!string.IsNullOrEmpty(audioBase64) && audioService != null)
+                {
+                    _ = audioService.PlayBase64AudioAsync(audioBase64);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Error processing chat response: {ex.Message}", false, ConsoleColor.Red);
+                // Clear timeout tracking
+                pendingResponseMessage = null;
+                // Remove placeholder on error
+                int placeholderIndex = messages.FindIndex(m => m.IsPlaceholder);
+                if (placeholderIndex >= 0)
+                {
+                    messages.RemoveAt(placeholderIndex);
+                }
+                AddMessage("System", "Error receiving AI response", false);
+            }
+        }
+
+        private void OnChatError(string error)
+        {
+            Log($"❌ Chat error: {error}", false, ConsoleColor.Red);
+
+            // Clear timeout tracking
+            pendingResponseMessage = null;
+
+            // Remove placeholder on error
+            int placeholderIndex = messages.FindIndex(m => m.IsPlaceholder);
+            if (placeholderIndex >= 0)
+            {
+                messages.RemoveAt(placeholderIndex);
+            }
+
+            AddMessage("System", $"Error: {error}", false);
         }
 
         private string WrapText(string text, int fontSize, float maxWidth)
         {
-            var words = text.Split(' ');
-            var lines = new List<string>();
-            var currentLine = new StringBuilder();
+            string[] words = text.Split(' ');
+            List<string> lines = new List<string>();
+            StringBuilder currentLine = new StringBuilder();
 
-            foreach (var word in words)
+            foreach (string word in words)
             {
                 string testLine = currentLine.Length > 0 ? currentLine + " " + word : word;
                 Vector2 size = Raylib.MeasureTextEx(UIHelper.GetFont(), testLine, fontSize, 1);

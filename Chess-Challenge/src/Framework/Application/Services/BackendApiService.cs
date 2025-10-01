@@ -64,5 +64,25 @@ namespace ChessChallenge.Application.Services
             // Use SignalR hub method
             return await _signalRService.SaveGameResultAsync(gameId, pgn, result);
         }
+
+        public async Task<bool> SendChatMessageAsync(string gameId, string message)
+        {
+            if (!_config.EnableBackendIntegration || !IsConnected || string.IsNullOrEmpty(gameId))
+            {
+                return false;
+            }
+
+            return await _signalRService.SendChatMessageAsync(gameId, message);
+        }
+
+        public void RegisterChatResponseHandler(Action<object> handler)
+        {
+            _signalRService.RegisterChatResponseHandler(handler);
+        }
+
+        public void RegisterChatErrorHandler(Action<string> handler)
+        {
+            _signalRService.RegisterChatErrorHandler(handler);
+        }
     }
 }

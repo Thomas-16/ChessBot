@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ChessChallenge.Application.Services;
+using Microsoft.Extensions.DependencyInjection;
 using static ChessChallenge.Application.Settings;
 using static ChessChallenge.Application.ConsoleHelper;
 
@@ -62,6 +63,8 @@ namespace ChessChallenge.Application
 
         // Backend integration
         readonly GameStorageService? gameStorage;
+        readonly BackendApiService? backendApi;
+        readonly AudioService? audioService;
 
         public ChallengeController()
         {
@@ -74,10 +77,14 @@ namespace ChessChallenge.Application
             boardUI = new BoardUI();
             board = new Board();
             pgns = new();
-            chatUI = new ChatUI();
 
             // Initialize backend integration
             gameStorage = Program.GameStorage;
+            backendApi = Program.ServiceProvider?.GetService<BackendApiService>();
+            audioService = Program.ServiceProvider?.GetService<AudioService>();
+
+            // Initialize ChatUI with services
+            chatUI = new ChatUI(gameStorage, backendApi, audioService);
 
             BotStatsA = new BotMatchStats("IBot");
             BotStatsB = new BotMatchStats("IBot");

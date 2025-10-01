@@ -57,6 +57,7 @@ namespace ChessChallenge.Application
                 services.AddSingleton<SignalRService>();
                 services.AddHttpClient<BackendApiService>();
                 services.AddSingleton<GameStorageService>();
+                services.AddSingleton<AudioService>();
 
                 ServiceProvider = services.BuildServiceProvider();
                 GameStorage = ServiceProvider.GetRequiredService<GameStorageService>();

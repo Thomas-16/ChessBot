@@ -37,7 +37,7 @@ namespace ChessChallenge.Application.Services
 
             try
             {
-                var hubUrl = $"{_config.ApiBaseUrl.TrimEnd('/')}/chesshub";
+                string hubUrl = $"{_config.ApiBaseUrl.TrimEnd('/')}/chesshub";
                 Log($"🔌 Connecting to SignalR hub: {hubUrl}", false, ConsoleColor.Cyan);
 
                 _connection = new HubConnectionBuilder()
@@ -45,7 +45,7 @@ namespace ChessChallenge.Application.Services
                     .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30) })
                     .Build();
 
-                // Setup event handlers
+                // Setup event handlers BEFORE starting connection
                 _connection.Closed += OnDisconnected;
                 _connection.Reconnecting += OnReconnecting;
                 _connection.Reconnected += OnReconnected;
@@ -53,6 +53,16 @@ namespace ChessChallenge.Application.Services
                 // Setup server event handlers
                 _connection.On<string>("GameSaved", OnGameSaved);
                 _connection.On<string>("SaveError", OnSaveError);
+
+                // Register chat handlers if they were registered before connection was established
+                if (_chatResponseHandler != null)
+                {
+                    _connection.On<object>("ReceiveChatResponse", _chatResponseHandler);
+                }
+                if (_chatErrorHandler != null)
+                {
+                    _connection.On<string>("ChatError", _chatErrorHandler);
+                }
 
                 await _connection.StartAsync();
                 _isConnected = true;
@@ -81,7 +91,7 @@ namespace ChessChallenge.Application.Services
             try
             {
                 Log("🎮 Creating new game session via SignalR...", false, ConsoleColor.Cyan);
-                var gameId = await _connection.InvokeAsync<string>("StartNewGame");
+                string gameId = await _connection.InvokeAsync<string>("StartNewGame");
                 Log($"✅ Game session created: {gameId}", false, ConsoleColor.Green);
                 return gameId;
             }
@@ -112,6 +122,53 @@ namespace ChessChallenge.Application.Services
                 Log($"❌ Failed to save game: {ex.Message}", false, ConsoleColor.Red);
                 return false;
             }
+        }
+
+        public async Task<bool> SendChatMessageAsync(string gameId, string message)
+        {
+            if (!_isConnected || _connection == null)
+            {
+                Log("⚠️ Cannot send chat message - SignalR not connected", false, ConsoleColor.Yellow);
+                return false;
+            }
+
+            try
+            {
+                Log($"💬 Sending chat message via SignalR: {gameId}", false, ConsoleColor.Cyan);
+                await _connection.InvokeAsync("SendChatMessage", gameId, message);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Failed to send chat message: {ex.Message}", false, ConsoleColor.Red);
+                return false;
+            }
+        }
+
+        private Action<object>? _chatResponseHandler;
+        private Action<string>? _chatErrorHandler;
+
+        public void RegisterChatResponseHandler(Action<object> handler)
+        {
+            _chatResponseHandler = handler;
+            if (_connection != null)
+            {
+                _connection.On<object>("ReceiveChatResponse", handler);
+            }
+        }
+
+        public void RegisterChatErrorHandler(Action<string> handler)
+        {
+            _chatErrorHandler = handler;
+            if (_connection != null)
+            {
+                _connection.On<string>("ChatError", handler);
+            }
+        }
+
+        public HubConnection? GetConnection()
+        {
+            return _connection;
         }
 
         public async Task DisconnectAsync()
