@@ -27,7 +27,7 @@ public class GroqService
         {
             var requestBody = new
             {
-                model = "llama-3.1-70b-versatile",
+                model = "meta-llama/llama-4-scout-17b-16e-instruct",
                 messages = new[]
                 {
                     new { role = "system", content = AIPrompts.ChessOpponentSystemPrompt },
