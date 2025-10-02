@@ -41,16 +41,24 @@ public class ChessHub : Hub
 
     public async Task SendChatMessage(string gameId, string message)
     {
+        var totalTimer = System.Diagnostics.Stopwatch.StartNew();
         try
         {
+            _logger.LogInformation("📨 Chat request started for game {GameId}", gameId);
+
             // Validate game exists
+            var timer = System.Diagnostics.Stopwatch.StartNew();
             bool gameExists = await _context.Games.AnyAsync(g => g.Id == gameId);
+            timer.Stop();
+            _logger.LogInformation("⏱️ Game validation: {ElapsedMs}ms", timer.ElapsedMilliseconds);
+
             if (!gameExists)
             {
                 throw new HubException("Game not found");
             }
 
             // Save user message
+            timer.Restart();
             ChatMessage userMessage = new ChatMessage
             {
                 GameId = gameId,
@@ -59,11 +67,17 @@ public class ChessHub : Hub
                 Timestamp = DateTime.UtcNow
             };
             _context.ChatMessages.Add(userMessage);
+            timer.Stop();
+            _logger.LogInformation("⏱️ User message creation: {ElapsedMs}ms", timer.ElapsedMilliseconds);
 
             // Get AI response
+            timer.Restart();
             string aiResponse = await _aiService.GetChessResponseAsync(message, gameId);
+            timer.Stop();
+            _logger.LogInformation("⏱️ OpenAI API call: {ElapsedMs}ms", timer.ElapsedMilliseconds);
 
             // Save AI message
+            timer.Restart();
             ChatMessage aiMessage = new ChatMessage
             {
                 GameId = gameId,
@@ -72,14 +86,19 @@ public class ChessHub : Hub
                 Timestamp = DateTime.UtcNow
             };
             _context.ChatMessages.Add(aiMessage);
-
             await _context.SaveChangesAsync();
+            timer.Stop();
+            _logger.LogInformation("⏱️ Database save: {ElapsedMs}ms", timer.ElapsedMilliseconds);
 
             // Generate speech for AI response
+            timer.Restart();
             byte[] audioBytes = await _voiceService.TextToSpeechAsync(aiResponse);
             string audioBase64 = Convert.ToBase64String(audioBytes);
+            timer.Stop();
+            _logger.LogInformation("⏱️ ElevenLabs TTS: {ElapsedMs}ms", timer.ElapsedMilliseconds);
 
             // Send response back to client
+            timer.Restart();
             await Clients.Caller.SendAsync("ReceiveChatResponse", new
             {
                 gameId = gameId,
@@ -87,12 +106,16 @@ public class ChessHub : Hub
                 audio = audioBase64,
                 timestamp = aiMessage.Timestamp
             });
+            timer.Stop();
+            _logger.LogInformation("⏱️ SignalR response send: {ElapsedMs}ms", timer.ElapsedMilliseconds);
 
-            _logger.LogInformation("Processed chat message for game {GameId}", gameId);
+            totalTimer.Stop();
+            _logger.LogInformation("✅ Total chat processing time: {ElapsedMs}ms for game {GameId}", totalTimer.ElapsedMilliseconds, gameId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing chat message for game {GameId}", gameId);
+            totalTimer.Stop();
+            _logger.LogError(ex, "❌ Error processing chat message after {ElapsedMs}ms for game {GameId}", totalTimer.ElapsedMilliseconds, gameId);
             await Clients.Caller.SendAsync("ChatError", "Failed to process message");
         }
     }
