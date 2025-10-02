@@ -9,13 +9,15 @@ namespace Chess_Backend.Hubs;
 public class ChessHub : Hub
 {
     private readonly ChessDbContext _context;
+    private readonly GroqService _groqService;
     private readonly AIService _aiService;
     private readonly VoiceService _voiceService;
     private readonly ILogger<ChessHub> _logger;
 
-    public ChessHub(ChessDbContext context, AIService aiService, VoiceService voiceService, ILogger<ChessHub> logger)
+    public ChessHub(ChessDbContext context, GroqService groqService, AIService aiService, VoiceService voiceService, ILogger<ChessHub> logger)
     {
         _context = context;
+        _groqService = groqService;
         _aiService = aiService;
         _voiceService = voiceService;
         _logger = logger;
@@ -70,11 +72,23 @@ public class ChessHub : Hub
             timer.Stop();
             _logger.LogInformation("⏱️ User message creation: {ElapsedMs}ms", timer.ElapsedMilliseconds);
 
-            // Get AI response
+            // Get AI response using Groq (with OpenAI fallback)
             timer.Restart();
-            string aiResponse = await _aiService.GetChessResponseAsync(message, gameId);
-            timer.Stop();
-            _logger.LogInformation("⏱️ OpenAI API call: {ElapsedMs}ms", timer.ElapsedMilliseconds);
+            string aiResponse;
+            try
+            {
+                aiResponse = await _groqService.GetChessResponseAsync(message, gameId);
+                timer.Stop();
+                _logger.LogInformation("⏱️ Groq API call: {ElapsedMs}ms", timer.ElapsedMilliseconds);
+            }
+            catch (Exception groqEx)
+            {
+                _logger.LogWarning(groqEx, "Groq API failed, falling back to OpenAI");
+                timer.Restart();
+                aiResponse = await _aiService.GetChessResponseAsync(message, gameId);
+                timer.Stop();
+                _logger.LogInformation("⏱️ OpenAI API call (fallback): {ElapsedMs}ms", timer.ElapsedMilliseconds);
+            }
 
             // Save AI message
             timer.Restart();

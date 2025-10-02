@@ -1,6 +1,7 @@
 using System.ClientModel;
 using OpenAI.Chat;
 using System.Collections.Generic;
+using Chess_Backend.Config;
 
 namespace Chess_Backend.Services;
 
@@ -23,13 +24,9 @@ public class AIService
     {
         try
         {
-            string systemPrompt = "You are a witty chess opponent talking to a human that you're currently playing against. Keep responses brief and chess-focused. " +
-                                  "Be encouraging but competitive. Make occasional references to chess strategy. " +
-                                  "Keep responses short and under 3 sentences. Don't use emojis.";
-
             List<ChatMessage> messages = new List<ChatMessage>
             {
-                new SystemChatMessage(systemPrompt),
+                new SystemChatMessage(AIPrompts.ChessOpponentSystemPrompt),
                 new UserChatMessage($"Game {gameId}: {userMessage}")
             };
 

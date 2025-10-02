@@ -31,6 +31,8 @@ builder.Services.AddDbContext<ChessDbContext>(options =>
 
 // Register services
 builder.Services.AddScoped<AIService>();
+builder.Services.AddScoped<GroqService>();
+builder.Services.AddHttpClient<GroqService>();
 builder.Services.AddScoped<VoiceService>();
 builder.Services.AddHttpClient<VoiceService>();
 
