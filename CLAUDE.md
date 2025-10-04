@@ -1,0 +1,203 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+This is a dual-project chess application consisting of:
+- **Chess-Challenge**: Raylib-based chess GUI client (.NET 6.0) with AI chat features
+- **Chess-Backend**: ASP.NET Core 8.0 backend hosted on Render with SignalR, PostgreSQL, OpenAI/Groq, and ElevenLabs TTS
+
+## Build & Run Commands
+
+### Frontend (Chess-Challenge)
+```bash
+# Build
+cd Chess-Challenge
+dotnet build
+
+# Run (GUI mode - default)
+dotnet run
+
+# Run in UCI mode (for chess engines)
+# Set UCI_MODE = true in Program.cs first
+```
+
+### Backend (Chess-Backend)
+```bash
+# Build
+cd Chess-Backend
+dotnet build
+
+# Run locally
+dotnet run
+
+# Docker build (for Render deployment)
+docker build -t chess-backend .
+docker run -p 5000:5000 chess-backend
+```
+
+## Architecture
+
+### Frontend Architecture (Chess-Challenge)
+
+**Dual Mode Operation:**
+- **GUI Mode** (default): Raylib-based visual chess game with real-time chat
+- **UCI Mode**: Text-based Universal Chess Interface for engine integration
+
+**Key Components:**
+1. **Chess Engine** (`src/Main Bot/`)
+   - `MainBot.cs`: Core chess AI with minimax + alpha-beta pruning
+   - `Evaluation.cs`: Position evaluation (material, piece-square tables)
+   - `TranspositionTable.cs`: Move caching for performance
+   - `OpeningBook.cs`: Opening move database
+   - `UCIEngine.cs`: UCI protocol implementation
+
+2. **UI Layer** (`src/Framework/Application/UI/`)
+   - `BoardUI.cs`: Chess board rendering with Raylib
+   - `ChatUI.cs`: DM-style chat interface with typing effects
+   - `MenuUI.cs`: Game controls and buttons
+   - `UIHelper.cs`: Resolution-independent scaling utilities
+
+3. **Services** (`src/Framework/Application/Services/`)
+   - `SignalRService.cs`: Real-time WebSocket connection to backend
+   - `BackendApiService.cs`: Wrapper for backend API calls
+   - `GameStorageService.cs`: Game session and chat persistence
+   - `AudioService.cs`: TTS audio playback (plays MP3 from base64)
+
+4. **Core** (`src/Framework/Application/Core/`)
+   - `ChallengeController.cs`: Main game controller, orchestrates UI/services
+   - `Program.cs`: Entry point, DI setup, Raylib initialization
+
+**Rendering:**
+- Uses Raylib-cs for graphics (1920x1080 reference resolution)
+- SDF (Signed Distance Field) fonts for crisp text at any scale
+- All UI coordinates scaled via `UIHelper.Scale()` for resolution independence
+
+### Backend Architecture (Chess-Backend)
+
+**Tech Stack:**
+- ASP.NET Core 8.0 with SignalR for real-time communication
+- PostgreSQL with Entity Framework Core
+- Groq API (llama-3.1-70b-versatile, ~300-600ms) with OpenAI fallback (gpt-4o-mini, ~2000ms)
+- ElevenLabs for text-to-speech (~1800ms)
+
+**Key Components:**
+1. **SignalR Hub** (`Hubs/ChessHub.cs`)
+   - `StartNewGame()`: Creates game session, returns gameId
+   - `SendChatMessage(gameId, message)`:
+     - Tries Groq first (fast), falls back to OpenAI
+     - Generates TTS audio via ElevenLabs
+     - Sends `ReceiveChatResponse` event with message + audio (base64)
+   - `SaveGameResult(gameId, pgn, result)`: Persists completed games
+
+2. **Services:**
+   - `GroqService.cs`: Groq API integration (primary, fastest)
+   - `AIService.cs`: OpenAI integration (fallback)
+   - `VoiceService.cs`: ElevenLabs TTS + OpenAI Whisper STT
+   - Both AI services use shared prompt from `Config/AIPrompts.cs`
+
+3. **Database Models** (`Models/`)
+   - `Game`: Chess game sessions (Id, PGN, Result, timestamps)
+   - `ChatMessage`: Chat history (GameId, Speaker, Message, Timestamp)
+
+**Connection Flow:**
+1. Frontend connects to SignalR at startup
+2. Game starts → backend creates session with gameId
+3. User sends chat → Groq generates response (~300ms) + ElevenLabs TTS (~1800ms)
+4. Backend sends text + audio back via SignalR event
+5. Frontend displays typing effect + plays audio simultaneously
+6. Game ends → frontend sends PGN to backend for storage
+
+**Deployment (Render):**
+- Uses Dockerfile for deployment (no native .NET support on Render)
+- Environment variables: `DATABASE_URL`, `GROQ_API_KEY`, `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, `PORT`
+- DATABASE_URL parsed from Render's PostgreSQL format: `postgres://user:pass@host:port/db`
+- Health checks at `/health` and `/health/ready`
+
+## Frontend-Backend Integration
+
+**SignalR Events:**
+- **Client → Server:**
+  - `StartNewGame()` → returns gameId
+  - `SendChatMessage(gameId, message)` → triggers AI response
+  - `SaveGameResult(gameId, pgn, result)` → saves game
+
+- **Server → Client:**
+  - `ReceiveChatResponse` → { gameId, message, audio (base64), timestamp }
+  - `ChatError` → error string
+  - `GameSaved` → gameId confirmation
+
+**Chat Flow with Timing:**
+1. User types message → `ChatUI.SendMessage()`
+2. Display "..." placeholder immediately
+3. Send to backend via SignalR (~50ms network)
+4. Backend processes:
+   - Game validation: ~5ms
+   - Groq API: ~300-600ms (or OpenAI fallback: ~2000ms)
+   - Database save: ~85ms
+   - ElevenLabs TTS: ~1800ms
+5. Total backend time: ~2.2s (Groq) or ~4s (OpenAI)
+6. Frontend receives response
+7. Replace "..." with actual message
+8. Start typing effect (30ms per character)
+9. Play audio simultaneously (from base64 → temp file → Raylib music stream, no looping)
+
+**Configuration:**
+- Frontend: `Chess-Challenge/appsettings.json` (backend URL, SignalR settings)
+- Backend: Environment variables on Render
+
+## Important Implementation Details
+
+**Chat UI Typing Effect:**
+- `ChatMessage.IsTyping` controls animation state
+- `ChatMessage.VisibleCharCount` increments every 30ms
+- `ChatMessage.GetVisibleMessage()` returns substring for rendering
+- Audio plays in background via `AudioService.PlayBase64AudioAsync()`
+
+**SignalR Handler Registration:**
+- Handlers MUST be registered BEFORE `connection.StartAsync()`
+- `ChatUI` registers handlers in constructor → stored in `SignalRService` fields
+- When connection created, stored handlers are attached to connection
+- This prevents timing issues where UI tries to register on null connection
+
+**Audio Playback (No Looping):**
+- Set `music.looping = false` BEFORE assigning to nullable field
+- Cannot modify struct properties on `Music?` value type directly
+- TTS audio auto-stops when playback completes
+
+**Response Timeout:**
+- 10-second timeout for chat responses
+- Tracked via `pendingResponseMessage` and `pendingResponseStartTime`
+- Timeout shows "Error responding right now" in chat
+
+**AI Prompt Consistency:**
+- Both Groq and OpenAI use `AIPrompts.ChessOpponentSystemPrompt`
+- Located in `Chess-Backend/Config/AIPrompts.cs`
+- Change prompt there to affect both services
+
+## Deployment Notes
+
+**Backend (Render):**
+1. Push changes to repo
+2. Render auto-deploys from `Chess-Backend/Dockerfile`
+3. Verify environment variables are set: GROQ_API_KEY, OPENAI_API_KEY, ELEVENLABS_API_KEY, DATABASE_URL, PORT
+4. Check logs for performance timing (⏱️ emoji prefixed)
+
+**Frontend:**
+- Standalone .NET 6 executable
+- Update `appsettings.json` ApiBaseUrl to point to Render backend
+- Run locally: `dotnet run` from Chess-Challenge directory
+
+## Performance Optimization
+
+**Current Bottlenecks (in order):**
+1. ElevenLabs TTS: ~1800ms (unavoidable, external API)
+2. Groq API: ~300-600ms (fast, already optimized)
+3. Database: ~85ms (PostgreSQL on Render free tier)
+
+**If response time needs improvement:**
+- Groq is already 3-4x faster than OpenAI
+- Consider streaming: send text response immediately, stream audio separately
+- Make TTS optional (toggle voice on/off)
+- Cache frequent responses
