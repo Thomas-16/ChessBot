@@ -31,7 +31,7 @@ public class GroqService
                 messages = new[]
                 {
                     new { role = "system", content = AIPrompts.ChessOpponentSystemPrompt },
-                    new { role = "user", content = $"\n {userMessage}" }
+                    new { role = "user", content = userMessage }
                 },
                 temperature = 0.7,
                 max_tokens = 80
