@@ -27,7 +27,7 @@ public class AIService
             List<ChatMessage> messages = new List<ChatMessage>
             {
                 new SystemChatMessage(AIPrompts.ChessOpponentSystemPrompt),
-                new UserChatMessage($"Game {gameId}: {userMessage}")
+                new UserChatMessage($"\n {userMessage}")
             };
 
             ClientResult<ChatCompletion>? completion = await _chatClient.CompleteChatAsync(messages);
