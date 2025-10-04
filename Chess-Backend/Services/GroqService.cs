@@ -34,7 +34,7 @@ public class GroqService
                     new { role = "user", content = $"Game {gameId}: {userMessage}" }
                 },
                 temperature = 0.7,
-                max_tokens = 150
+                max_tokens = 80
             };
 
             var jsonContent = JsonSerializer.Serialize(requestBody);
