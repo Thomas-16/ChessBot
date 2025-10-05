@@ -10,15 +10,15 @@ public class ChessHub : Hub
 {
     private readonly ChessDbContext _context;
     private readonly GroqService _groqService;
-    private readonly AIService _aiService;
+    private readonly OpenAIService _openAiService;
     private readonly VoiceService _voiceService;
     private readonly ILogger<ChessHub> _logger;
 
-    public ChessHub(ChessDbContext context, GroqService groqService, AIService aiService, VoiceService voiceService, ILogger<ChessHub> logger)
+    public ChessHub(ChessDbContext context, GroqService groqService, OpenAIService openAiService, VoiceService voiceService, ILogger<ChessHub> logger)
     {
         _context = context;
         _groqService = groqService;
-        _aiService = aiService;
+        _openAiService = openAiService;
         _voiceService = voiceService;
         _logger = logger;
     }
@@ -71,7 +71,7 @@ public class ChessHub : Hub
             catch (Exception groqEx)
             {
                 _logger.LogWarning(groqEx, "Groq API failed, falling back to OpenAI");
-                aiResponse = await _aiService.GetChessResponseAsync(message, gameId);
+                aiResponse = await _openAiService.GetChessResponseAsync(message, gameId);
             }
 
             // Save AI message

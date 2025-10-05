@@ -5,12 +5,12 @@ using Chess_Backend.Config;
 
 namespace Chess_Backend.Services;
 
-public class AIService
+public class OpenAIService
 {
     private readonly ChatClient _chatClient;
-    private readonly ILogger<AIService> _logger;
+    private readonly ILogger<OpenAIService> _logger;
 
-    public AIService(IConfiguration configuration, ILogger<AIService> logger)
+    public OpenAIService(IConfiguration configuration, ILogger<OpenAIService> logger)
     {
         string apiKey = configuration["OPENAI_API_KEY"] ??
                         Environment.GetEnvironmentVariable("OPENAI_API_KEY") ??
