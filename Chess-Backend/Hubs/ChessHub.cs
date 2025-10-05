@@ -86,17 +86,46 @@ public class ChessHub : Hub
 
             await _context.SaveChangesAsync();
 
-            // Generate speech for AI response
-            byte[] audioBytes = await _voiceService.TextToSpeechAsync(aiResponse);
-            string audioBase64 = Convert.ToBase64String(audioBytes);
-
-            // Send response back to client
+            // Send text response immediately (don't wait for audio)
             await Clients.Caller.SendAsync("ReceiveChatResponse", new
             {
                 gameId = gameId,
                 message = aiResponse,
-                audio = audioBase64,
                 timestamp = aiMessage.Timestamp
+            });
+
+            _logger.LogInformation("⏱️ Sent text response for game {GameId}, starting audio stream", gameId);
+
+            // Stream audio chunks asynchronously
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await foreach (byte[] audioChunk in _voiceService.TextToSpeechStreamAsync(aiResponse))
+                    {
+                        string chunkBase64 = Convert.ToBase64String(audioChunk);
+                        await Clients.Caller.SendAsync("ReceiveAudioChunk", new
+                        {
+                            gameId = gameId,
+                            audioChunk = chunkBase64,
+                            isLast = false
+                        });
+                    }
+
+                    // Send final chunk marker
+                    await Clients.Caller.SendAsync("ReceiveAudioChunk", new
+                    {
+                        gameId = gameId,
+                        audioChunk = "",
+                        isLast = true
+                    });
+
+                    _logger.LogInformation("⏱️ Audio streaming complete for game {GameId}", gameId);
+                }
+                catch (Exception audioEx)
+                {
+                    _logger.LogError(audioEx, "⏱️ Error streaming audio for game {GameId}", gameId);
+                }
             });
 
             _logger.LogInformation("Processed chat message for game {GameId}", gameId);

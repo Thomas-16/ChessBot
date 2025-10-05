@@ -80,6 +80,86 @@ public class VoiceService
         }
     }
 
+    public async IAsyncEnumerable<byte[]> TextToSpeechStreamAsync(string text)
+    {
+        // ElevenLabs streaming text-to-speech API
+        string voiceId = "21m00Tcm4TlvDq8ikWAM"; // Rachel voice
+        string url = $"https://api.elevenlabs.io/v1/text-to-speech/{voiceId}/stream?optimize_streaming_latency=3&output_format=mp3_44100_128";
+
+        var payload = new
+        {
+            text = text,
+            model_id = "eleven_monolingual_v1",
+            voice_settings = new
+            {
+                stability = 0.5,
+                similarity_boost = 0.5
+            }
+        };
+
+        StringContent content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+        // Create request with headers
+        HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = content
+        };
+        request.Headers.Add("xi-api-key", _elevenLabsApiKey);
+
+        HttpResponseMessage? response = null;
+        try
+        {
+            // Send request with ResponseHeadersRead to enable streaming
+            response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                string errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogError("⏱️ ElevenLabs streaming TTS failed with status: {StatusCode}, response: {ErrorBody}",
+                    response.StatusCode, errorBody);
+                yield break;
+            }
+
+            _logger.LogInformation("⏱️ Starting streaming TTS for text: {Text}",
+                text.Substring(0, Math.Min(50, text.Length)));
+
+            // Read stream in chunks
+            using Stream audioStream = await response.Content.ReadAsStreamAsync();
+            byte[] buffer = new byte[8192]; // 8KB chunks
+            int bytesRead;
+            int totalBytes = 0;
+            int chunkCount = 0;
+
+            while ((bytesRead = await audioStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+            {
+                chunkCount++;
+                totalBytes += bytesRead;
+
+                // Create a new array with only the bytes read
+                byte[] chunk = new byte[bytesRead];
+                Array.Copy(buffer, chunk, bytesRead);
+
+                if (chunkCount == 1)
+                {
+                    _logger.LogInformation("⏱️ First audio chunk received ({ChunkSize} bytes)", bytesRead);
+                }
+
+                yield return chunk;
+            }
+
+            _logger.LogInformation("⏱️ Streaming TTS complete: {TotalBytes} bytes in {ChunkCount} chunks",
+                totalBytes, chunkCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "⏱️ Error during streaming TTS for text: {Text}", text);
+        }
+        finally
+        {
+            response?.Dispose();
+        }
+    }
+
     public async Task<string> SpeechToTextAsync(byte[] audioData)
     {
         try

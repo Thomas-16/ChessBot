@@ -54,6 +54,7 @@ namespace ChessChallenge.Application
             {
                 backendApi.RegisterChatResponseHandler(OnReceiveChatResponse);
                 backendApi.RegisterChatErrorHandler(OnChatError);
+                backendApi.RegisterAudioChunkHandler(OnReceiveAudioChunk);
             }
 
             // Add a welcome message from AI
@@ -444,7 +445,6 @@ namespace ChessChallenge.Application
                 // Parse response JSON
                 JsonElement jsonElement = (JsonElement)response;
                 string message = jsonElement.GetProperty("message").GetString() ?? "No response";
-                string? audioBase64 = jsonElement.TryGetProperty("audio", out JsonElement audioProp) ? audioProp.GetString() : null;
 
                 Log($"💬 Received AI response ({responseTimeMs:F0}ms): {message}", false, ConsoleColor.Green);
 
@@ -459,16 +459,15 @@ namespace ChessChallenge.Application
                 ChatMessage aiMessage = new ChatMessage("AI", message, false)
                 {
                     IsTyping = true,
-                    VisibleCharCount = 0,
-                    AudioBase64 = audioBase64
+                    VisibleCharCount = 0
                 };
                 messages.Add(aiMessage);
                 lastTypingUpdate = (float)Raylib.GetTime();
 
-                // Play audio if available
-                if (!string.IsNullOrEmpty(audioBase64) && audioService != null)
+                // Start streaming audio session (audio chunks will arrive separately)
+                if (audioService != null)
                 {
-                    _ = audioService.PlayBase64AudioAsync(audioBase64);
+                    audioService.StartStreamingAudio();
                 }
             }
             catch (Exception ex)
@@ -501,6 +500,39 @@ namespace ChessChallenge.Application
             }
 
             AddMessage("System", $"Error: {error}", false);
+        }
+
+        private async void OnReceiveAudioChunk(object chunkData)
+        {
+            try
+            {
+                // Parse chunk JSON
+                JsonElement jsonElement = (JsonElement)chunkData;
+                string audioChunkBase64 = jsonElement.GetProperty("audioChunk").GetString() ?? "";
+                bool isLast = jsonElement.GetProperty("isLast").GetBoolean();
+
+                if (audioService == null)
+                {
+                    return;
+                }
+
+                if (isLast)
+                {
+                    // Finish streaming
+                    audioService.FinishStreamingAudio();
+                    Log("🔊 Audio streaming complete", false, ConsoleColor.Green);
+                }
+                else if (!string.IsNullOrEmpty(audioChunkBase64))
+                {
+                    // Decode and add chunk
+                    byte[] chunkBytes = Convert.FromBase64String(audioChunkBase64);
+                    await audioService.AddAudioChunk(chunkBytes);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Error processing audio chunk: {ex.Message}", false, ConsoleColor.Red);
+            }
         }
 
         private string WrapText(string text, int fontSize, float maxWidth)
