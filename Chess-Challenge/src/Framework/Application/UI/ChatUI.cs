@@ -64,7 +64,7 @@ namespace ChessChallenge.Application
         {
             messages.Add(new ChatMessage(sender, message, isFromUser));
             // Auto-scroll to bottom
-            scrollOffset = 0f;
+            ScrollToBottom();
         }
 
         public void ClearMessages()
@@ -77,6 +77,7 @@ namespace ChessChallenge.Application
         {
             HandleInputBoxClick();
             HandleKeyboardInput();
+            HandleScrollInput();
             UpdateTypingEffect();
             CheckResponseTimeout();
         }
@@ -91,8 +92,16 @@ namespace ChessChallenge.Application
                 {
                     if (currentTime - lastTypingUpdate >= TypingSpeed)
                     {
+                        bool wasAtBottom = IsScrolledToBottom();
+
                         message.VisibleCharCount++;
                         lastTypingUpdate = currentTime;
+
+                        // Auto-scroll to bottom if we were at the bottom before the character was added
+                        if (wasAtBottom)
+                        {
+                            ScrollToBottom();
+                        }
 
                         // Stop typing when all characters are visible
                         if (message.VisibleCharCount >= message.Message.Length)
@@ -348,6 +357,83 @@ namespace ChessChallenge.Application
             }
         }
 
+        private void HandleScrollInput()
+        {
+            Vector2 scaledPos = UIHelper.Scale(panelPos);
+            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            float scaledHeaderHeight = UIHelper.Scale(headerHeight);
+            float scaledInputHeight = UIHelper.Scale(inputHeight);
+            float scaledPadding = UIHelper.Scale(messagePadding);
+
+            // Message area bounds
+            float messageAreaX = scaledPos.X;
+            float messageAreaY = scaledPos.Y + scaledHeaderHeight;
+            float messageAreaWidth = scaledSize.X;
+            float messageAreaHeight = scaledSize.Y - scaledHeaderHeight - scaledInputHeight - scaledPadding;
+
+            Rectangle messageAreaRect = new Rectangle(messageAreaX, messageAreaY, messageAreaWidth, messageAreaHeight);
+            Vector2 mousePos = Raylib.GetMousePosition();
+
+            // Only scroll if mouse is over the message area
+            if (MouseInRect(messageAreaRect))
+            {
+                float wheelMove = Raylib.GetMouseWheelMove();
+                if (wheelMove != 0)
+                {
+                    // Scroll speed (pixels per wheel tick)
+                    float scrollSpeed = UIHelper.Scale(40f);
+                    scrollOffset += wheelMove * scrollSpeed;
+
+                    // Calculate total content height
+                    float totalContentHeight = CalculateTotalContentHeight();
+
+                    // Clamp scroll offset
+                    // Max scroll is 0 (bottom), min scroll shows top of content
+                    float minScroll = -(totalContentHeight - messageAreaHeight + scaledPadding);
+                    if (minScroll > 0) minScroll = 0; // If content fits, don't scroll
+
+                    scrollOffset = Math.Clamp(scrollOffset, minScroll, 0);
+                }
+            }
+        }
+
+        private float CalculateTotalContentHeight()
+        {
+            Vector2 scaledPos = UIHelper.Scale(panelPos);
+            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            float scaledHeaderHeight = UIHelper.Scale(headerHeight);
+            float scaledInputHeight = UIHelper.Scale(inputHeight);
+            float scaledPadding = UIHelper.Scale(messagePadding);
+
+            float messageAreaX = scaledPos.X + scaledPadding;
+            float messageAreaWidth = scaledSize.X - scaledPadding * 2;
+
+            float totalHeight = 0;
+
+            foreach (ChatMessage message in messages)
+            {
+                float bubbleHeight = CalculateMessageHeight(message, messageAreaWidth);
+                totalHeight += bubbleHeight + scaledPadding;
+            }
+
+            return totalHeight;
+        }
+
+        private float CalculateMessageHeight(ChatMessage message, float areaWidth)
+        {
+            int fontSize = UIHelper.ScaleInt(24);
+            int senderFontSize = UIHelper.ScaleInt(18);
+            float scaledBubblePadding = UIHelper.Scale(bubblePadding);
+
+            string displayMessage = message.GetVisibleMessage();
+            float maxBubbleWidth = areaWidth * 0.7f;
+            string wrappedText = WrapText(displayMessage, fontSize, maxBubbleWidth - scaledBubblePadding * 2);
+            Vector2 textSize = Raylib.MeasureTextEx(UIHelper.GetFont(), wrappedText, fontSize, 1);
+
+            float bubbleHeight = textSize.Y + scaledBubblePadding * 2 + senderFontSize + UIHelper.Scale(4);
+            return bubbleHeight;
+        }
+
         private void HandleKeyboardInput()
         {
             if (!inputBoxFocused) return;
@@ -402,7 +488,7 @@ namespace ChessChallenge.Application
                 // Add placeholder "..." message for AI
                 ChatMessage placeholderMessage = new ChatMessage("AI", "...", false, isPlaceholder: true);
                 messages.Add(placeholderMessage);
-                scrollOffset = 0f;
+                ScrollToBottom();
 
                 // Start timeout tracking and timing
                 pendingResponseMessage = placeholderMessage;
@@ -540,6 +626,53 @@ namespace ChessChallenge.Application
             Vector2 mousePos = Raylib.GetMousePosition();
             return mousePos.X >= rec.x && mousePos.Y >= rec.y &&
                    mousePos.X <= rec.x + rec.width && mousePos.Y <= rec.y + rec.height;
+        }
+
+        private void ScrollToBottom()
+        {
+            Vector2 scaledPos = UIHelper.Scale(panelPos);
+            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            float scaledHeaderHeight = UIHelper.Scale(headerHeight);
+            float scaledInputHeight = UIHelper.Scale(inputHeight);
+            float scaledPadding = UIHelper.Scale(messagePadding);
+
+            float messageAreaHeight = scaledSize.Y - scaledHeaderHeight - scaledInputHeight - scaledPadding * 2;
+            float totalContentHeight = CalculateTotalContentHeight();
+
+            // If content fits in view, no need to scroll
+            if (totalContentHeight <= messageAreaHeight)
+            {
+                scrollOffset = 0f;
+            }
+            else
+            {
+                // Negative offset pushes content up, showing bottom
+                scrollOffset = -(totalContentHeight - messageAreaHeight);
+            }
+        }
+
+        private bool IsScrolledToBottom()
+        {
+            Vector2 scaledPos = UIHelper.Scale(panelPos);
+            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            float scaledHeaderHeight = UIHelper.Scale(headerHeight);
+            float scaledInputHeight = UIHelper.Scale(inputHeight);
+            float scaledPadding = UIHelper.Scale(messagePadding);
+
+            float messageAreaHeight = scaledSize.Y - scaledHeaderHeight - scaledInputHeight - scaledPadding * 2;
+            float totalContentHeight = CalculateTotalContentHeight();
+
+            // If content fits in view, we're always at bottom
+            if (totalContentHeight <= messageAreaHeight)
+            {
+                return true;
+            }
+
+            // Calculate what the bottom scroll position should be
+            float bottomScrollOffset = -(totalContentHeight - messageAreaHeight);
+
+            // Consider "at bottom" if within 10 pixels of bottom position
+            return scrollOffset <= bottomScrollOffset + 10f;
         }
     }
 }
