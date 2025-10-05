@@ -96,9 +96,6 @@ public class ChessHub : Hub
 
             _logger.LogInformation("⏱️ Sent text response for game {GameId}, starting audio stream", gameId);
 
-            // Capture the client proxy before starting background task (Hub gets disposed after method returns)
-            var caller = Clients.Caller;
-
             // Stream audio chunks asynchronously
             _ = Task.Run(async () =>
             {
@@ -107,7 +104,7 @@ public class ChessHub : Hub
                     await foreach (byte[] audioChunk in _voiceService.TextToSpeechStreamAsync(aiResponse))
                     {
                         string chunkBase64 = Convert.ToBase64String(audioChunk);
-                        await caller.SendAsync("ReceiveAudioChunk", new
+                        await Clients.Caller.SendAsync("ReceiveAudioChunk", new
                         {
                             gameId = gameId,
                             audioChunk = chunkBase64,
@@ -116,7 +113,7 @@ public class ChessHub : Hub
                     }
 
                     // Send final chunk marker
-                    await caller.SendAsync("ReceiveAudioChunk", new
+                    await Clients.Caller.SendAsync("ReceiveAudioChunk", new
                     {
                         gameId = gameId,
                         audioChunk = "",
