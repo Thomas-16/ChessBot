@@ -89,7 +89,24 @@ namespace ChessChallenge.Application
             bool pressedThisFrame = pressed && Raylib.IsMouseButtonPressed(MouseButton.MOUSE_BUTTON_LEFT);
             Color col = mouseOver ? (pressed ? pressCol : hoverCol) : normalCol;
 
-            Raylib.DrawRectangleRec(rec, col);
+            // Subtle shadow for depth
+            if (mouseOver && !pressed)
+            {
+                Rectangle shadowRec = new(rec.x + 2, rec.y + 2, rec.width, rec.height);
+                Raylib.DrawRectangleRounded(shadowRec, 0.15f, 8, new Color(0, 0, 0, 40));
+            }
+
+            // Main button with rounded corners
+            Raylib.DrawRectangleRounded(rec, 0.15f, 8, col);
+
+            // Subtle top highlight when not pressed
+            if (!pressed)
+            {
+                Color highlightCol = mouseOver ? new Color(100, 200, 255, 30) : new Color(60, 60, 60, 30);
+                Rectangle highlightRec = new(rec.x, rec.y, rec.width, Scale(3f));
+                Raylib.DrawRectangleRounded(highlightRec, 0.15f, 8, highlightCol);
+            }
+
             Color textCol = mouseOver ? Color.WHITE : new Color(180, 180, 180, 255);
             int fontSize = ScaleInt(32);
 

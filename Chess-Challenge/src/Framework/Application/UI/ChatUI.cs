@@ -35,6 +35,12 @@ namespace ChessChallenge.Application
         // Request timing
         private DateTime? lastRequestSentTime = null;
 
+        // UI animation states
+        private float inputBoxFocusLerp = 0f;
+        private float sendButtonHoverLerp = 0f;
+        private float sendButtonPressLerp = 0f;
+        private float scrollbarAlpha = 0f;
+
         // Layout constants (reference 1920x1080)
         private readonly Vector2 panelPos = new(1420, 150);
         private readonly Vector2 panelSize = new(450, 800);
@@ -80,6 +86,42 @@ namespace ChessChallenge.Application
             HandleScrollInput();
             UpdateTypingEffect();
             CheckResponseTimeout();
+            UpdateAnimations();
+        }
+
+        private void UpdateAnimations()
+        {
+            float deltaTime = Raylib.GetFrameTime();
+            float lerpSpeed = 8f;
+
+            // Input box focus animation
+            float targetFocus = inputBoxFocused ? 1f : 0f;
+            inputBoxFocusLerp = Lerp(inputBoxFocusLerp, targetFocus, deltaTime * lerpSpeed);
+
+            // Scrollbar fade animation
+            Vector2 scaledPos = UIHelper.Scale(panelPos);
+            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            float scaledHeaderHeight = UIHelper.Scale(headerHeight);
+            float scaledInputHeight = UIHelper.Scale(inputHeight);
+            float scaledPadding = UIHelper.Scale(messagePadding);
+
+            float messageAreaX = scaledPos.X;
+            float messageAreaY = scaledPos.Y + scaledHeaderHeight;
+            float messageAreaWidth = scaledSize.X;
+            float messageAreaHeight = scaledSize.Y - scaledHeaderHeight - scaledInputHeight - scaledPadding;
+
+            Rectangle messageAreaRect = new Rectangle(messageAreaX, messageAreaY, messageAreaWidth, messageAreaHeight);
+            Vector2 mousePos = Raylib.GetMousePosition();
+            bool mouseOverMessages = MouseInRect(messageAreaRect);
+
+            float targetScrollbarAlpha = mouseOverMessages ? 1f : 0f;
+            scrollbarAlpha = Lerp(scrollbarAlpha, targetScrollbarAlpha, deltaTime * 6f);
+        }
+
+        private float Lerp(float a, float b, float t)
+        {
+            t = Math.Min(1, Math.Max(t, 0));
+            return a + (b - a) * t;
         }
 
         private void UpdateTypingEffect()
@@ -148,12 +190,16 @@ namespace ChessChallenge.Application
             Vector2 scaledPos = UIHelper.Scale(panelPos);
             Vector2 scaledSize = UIHelper.Scale(panelSize);
 
-            // Semi-transparent dark background
+            // Semi-transparent dark background with subtle gradient effect
             Rectangle panelRect = new Rectangle(scaledPos.X, scaledPos.Y, scaledSize.X, scaledSize.Y);
-            Raylib.DrawRectangleRec(panelRect, new Color(30, 30, 30, 200));
+            Raylib.DrawRectangleRec(panelRect, new Color(30, 30, 30, 220));
 
-            // Border
-            Raylib.DrawRectangleLinesEx(panelRect, 2, new Color(60, 60, 60, 255));
+            // Subtle inner shadow effect
+            Rectangle innerShadow = new Rectangle(scaledPos.X + 2, scaledPos.Y + 2, scaledSize.X - 4, scaledSize.Y - 4);
+            Raylib.DrawRectangleLinesEx(innerShadow, 1, new Color(10, 10, 10, 60));
+
+            // Border with slight highlight
+            Raylib.DrawRectangleLinesEx(panelRect, 2, new Color(70, 70, 70, 255));
         }
 
         private void DrawChatHeader()
@@ -210,6 +256,36 @@ namespace ChessChallenge.Application
             }
 
             Raylib.EndScissorMode();
+
+            // Draw scrollbar if content overflows
+            DrawScrollbar(messageAreaX, messageAreaY, messageAreaWidth, messageAreaHeight);
+        }
+
+        private void DrawScrollbar(float areaX, float areaY, float areaWidth, float areaHeight)
+        {
+            if (scrollbarAlpha < 0.01f) return;
+
+            float totalContentHeight = CalculateTotalContentHeight();
+            if (totalContentHeight <= areaHeight) return;
+
+            float scrollbarWidth = UIHelper.Scale(4f);
+            float scrollbarX = areaX + areaWidth - scrollbarWidth - UIHelper.Scale(4f);
+
+            // Calculate scrollbar height and position
+            float visibleRatio = areaHeight / totalContentHeight;
+            float scrollbarHeight = Math.Max(areaHeight * visibleRatio, UIHelper.Scale(30f));
+
+            float maxScroll = -(totalContentHeight - areaHeight);
+            float scrollProgress = maxScroll == 0 ? 0 : Math.Abs(scrollOffset / maxScroll);
+            float scrollbarY = areaY + scrollProgress * (areaHeight - scrollbarHeight);
+
+            // Draw scrollbar track (subtle)
+            Rectangle trackRect = new Rectangle(scrollbarX, areaY, scrollbarWidth, areaHeight);
+            Raylib.DrawRectangleRounded(trackRect, 1f, 8, new Color(60, 60, 60, (int)(80 * scrollbarAlpha)));
+
+            // Draw scrollbar thumb
+            Rectangle thumbRect = new Rectangle(scrollbarX, scrollbarY, scrollbarWidth, scrollbarHeight);
+            Raylib.DrawRectangleRounded(thumbRect, 1f, 8, new Color(120, 120, 120, (int)(200 * scrollbarAlpha)));
         }
 
         private float DrawMessageBubble(ChatMessage message, float areaX, float startY, float areaWidth)
@@ -242,12 +318,23 @@ namespace ChessChallenge.Application
 
             float bubbleY = startY + senderFontSize + UIHelper.Scale(4);
 
-            // Draw bubble background
+            // Draw subtle shadow behind bubble
+            Rectangle shadowRect = new Rectangle(bubbleX + 2, bubbleY + 2, bubbleWidth, bubbleHeight - senderFontSize - UIHelper.Scale(4));
+            Raylib.DrawRectangleRounded(shadowRect, 0.25f, 8, new Color(0, 0, 0, 40));
+
+            // Draw bubble background with improved colors
             Rectangle bubbleRect = new Rectangle(bubbleX, bubbleY, bubbleWidth, bubbleHeight - senderFontSize - UIHelper.Scale(4));
             Color bubbleColor = message.IsFromUser
-                ? new Color(50, 100, 200, 255)
-                : new Color(60, 60, 60, 255);
-            Raylib.DrawRectangleRounded(bubbleRect, 0.2f, 8, bubbleColor);
+                ? new Color(55, 110, 210, 255)
+                : new Color(65, 65, 65, 255);
+            Raylib.DrawRectangleRounded(bubbleRect, 0.25f, 8, bubbleColor);
+
+            // Subtle highlight on top edge
+            Color highlightColor = message.IsFromUser
+                ? new Color(80, 140, 230, 60)
+                : new Color(85, 85, 85, 60);
+            Rectangle highlightRect = new Rectangle(bubbleX, bubbleY, bubbleWidth, UIHelper.Scale(2));
+            Raylib.DrawRectangleRounded(highlightRect, 0.25f, 8, highlightColor);
 
             // Draw message text
             Vector2 textPos = new Vector2(bubbleX + scaledBubblePadding, bubbleY + scaledBubblePadding);
@@ -269,13 +356,24 @@ namespace ChessChallenge.Application
             float sendButtonWidth = UIHelper.Scale(60);
             float sendButtonX = inputX + inputWidth + scaledPadding;
 
-            // Input box background
+            // Input box background with smooth focus transition
             Rectangle inputRect = new Rectangle(inputX, inputY, inputWidth, scaledInputHeight);
-            Color inputBgColor = inputBoxFocused
-                ? new Color(50, 50, 50, 255)
-                : new Color(40, 40, 40, 255);
-            Raylib.DrawRectangleRounded(inputRect, 0.2f, 8, inputBgColor);
-            Raylib.DrawRectangleRoundedLines(inputRect, 0.2f, 8, 2, new Color(80, 80, 80, 255));
+            Color inputBgColor = new Color(
+                (int)(40 + 15 * inputBoxFocusLerp),
+                (int)(40 + 15 * inputBoxFocusLerp),
+                (int)(40 + 15 * inputBoxFocusLerp),
+                255
+            );
+            Raylib.DrawRectangleRounded(inputRect, 0.3f, 8, inputBgColor);
+
+            // Animated border
+            Color borderColor = new Color(
+                (int)(80 + 80 * inputBoxFocusLerp),
+                (int)(80 + 80 * inputBoxFocusLerp),
+                (int)(80 + 80 * inputBoxFocusLerp),
+                255
+            );
+            Raylib.DrawRectangleRoundedLines(inputRect, 0.3f, 8, 2, borderColor);
 
             // Input text or placeholder
             int fontSize = UIHelper.ScaleInt(24);
@@ -305,31 +403,54 @@ namespace ChessChallenge.Application
             Rectangle buttonRect = new Rectangle(x, y, width, height);
             bool mouseOver = MouseInRect(buttonRect);
             bool canSend = inputText.Length > 0;
+            bool isPressed = mouseOver && Raylib.IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT);
 
+            // Smooth hover/press animations
+            float deltaTime = Raylib.GetFrameTime();
+            float targetHover = (mouseOver && canSend) ? 1f : 0f;
+            float targetPress = isPressed ? 1f : 0f;
+            sendButtonHoverLerp = Lerp(sendButtonHoverLerp, targetHover, deltaTime * 12f);
+            sendButtonPressLerp = Lerp(sendButtonPressLerp, targetPress, deltaTime * 20f);
+
+            // Scale effect on press
+            float scaleEffect = 1f - sendButtonPressLerp * 0.08f;
+            float scaledWidth = width * scaleEffect;
+            float scaledHeight = height * scaleEffect;
+            float offsetX = (width - scaledWidth) / 2f;
+            float offsetY = (height - scaledHeight) / 2f;
+
+            Rectangle scaledButtonRect = new Rectangle(x + offsetX, y + offsetY, scaledWidth, scaledHeight);
+
+            // Button color with smooth transitions
             Color buttonColor;
             if (!canSend)
             {
                 buttonColor = new Color(60, 60, 60, 255);
             }
-            else if (mouseOver && Raylib.IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT))
-            {
-                buttonColor = new Color(40, 120, 220, 255);
-            }
-            else if (mouseOver)
-            {
-                buttonColor = new Color(60, 140, 240, 255);
-            }
             else
             {
-                buttonColor = new Color(50, 100, 200, 255);
+                int r = (int)(50 + 10 * sendButtonHoverLerp - 10 * sendButtonPressLerp);
+                int g = (int)(100 + 40 * sendButtonHoverLerp - 20 * sendButtonPressLerp);
+                int b = (int)(200 + 40 * sendButtonHoverLerp - 20 * sendButtonPressLerp);
+                buttonColor = new Color(r, g, b, 255);
             }
 
-            Raylib.DrawRectangleRounded(buttonRect, 0.2f, 8, buttonColor);
+            Raylib.DrawRectangleRounded(scaledButtonRect, 0.3f, 8, buttonColor);
+
+            // Send icon with subtle glow on hover
+            if (canSend && sendButtonHoverLerp > 0.1f)
+            {
+                Color glowColor = new Color(100, 180, 255, (int)(40 * sendButtonHoverLerp));
+                Rectangle glowRect = new Rectangle(x + offsetX - 2, y + offsetY - 2, scaledWidth + 4, scaledHeight + 4);
+                Raylib.DrawRectangleRounded(glowRect, 0.3f, 8, glowColor);
+                Raylib.DrawRectangleRounded(scaledButtonRect, 0.3f, 8, buttonColor);
+            }
 
             // Send icon (triangle/arrow)
             Vector2 center = new Vector2(x + width / 2, y + height / 2);
             int fontSize = UIHelper.ScaleInt(28);
-            UIHelper.DrawText(">", center, fontSize, 1, Color.WHITE, UIHelper.AlignH.Centre, UIHelper.AlignV.Centre);
+            Color iconColor = canSend ? Color.WHITE : new Color(120, 120, 120, 255);
+            UIHelper.DrawText(">", center, fontSize, 1, iconColor, UIHelper.AlignH.Centre, UIHelper.AlignV.Centre);
 
             // Handle click
             if (canSend && mouseOver && Raylib.IsMouseButtonPressed(MouseButton.MOUSE_BUTTON_LEFT))
