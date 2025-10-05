@@ -63,10 +63,6 @@ namespace ChessChallenge.Application.Services
                 {
                     _connection.On<string>("ChatError", _chatErrorHandler);
                 }
-                if (_audioChunkHandler != null)
-                {
-                    _connection.On<object>("ReceiveAudioChunk", _audioChunkHandler);
-                }
 
                 await _connection.StartAsync();
                 _isConnected = true;
@@ -151,7 +147,6 @@ namespace ChessChallenge.Application.Services
 
         private Action<object>? _chatResponseHandler;
         private Action<string>? _chatErrorHandler;
-        private Action<object>? _audioChunkHandler;
 
         public void RegisterChatResponseHandler(Action<object> handler)
         {
@@ -168,15 +163,6 @@ namespace ChessChallenge.Application.Services
             if (_connection != null)
             {
                 _connection.On<string>("ChatError", handler);
-            }
-        }
-
-        public void RegisterAudioChunkHandler(Action<object> handler)
-        {
-            _audioChunkHandler = handler;
-            if (_connection != null)
-            {
-                _connection.On<object>("ReceiveAudioChunk", handler);
             }
         }
 

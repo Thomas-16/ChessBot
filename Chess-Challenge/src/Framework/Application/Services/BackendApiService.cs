@@ -84,10 +84,5 @@ namespace ChessChallenge.Application.Services
         {
             _signalRService.RegisterChatErrorHandler(handler);
         }
-
-        public void RegisterAudioChunkHandler(Action<object> handler)
-        {
-            _signalRService.RegisterAudioChunkHandler(handler);
-        }
     }
 }
