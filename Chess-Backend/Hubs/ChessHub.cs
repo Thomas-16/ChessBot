@@ -13,6 +13,7 @@ public class ChessHub : Hub
     private readonly OpenAIService _openAiService;
     private readonly VoiceService _voiceService;
     private readonly ILogger<ChessHub> _logger;
+    private readonly bool useGroq;
 
     public ChessHub(ChessDbContext context, GroqService groqService, OpenAIService openAiService, VoiceService voiceService, ILogger<ChessHub> logger)
     {
@@ -21,6 +22,16 @@ public class ChessHub : Hub
         _openAiService = openAiService;
         _voiceService = voiceService;
         _logger = logger;
+        
+        string provider = Environment.GetEnvironmentVariable("LLM_PROVIDER") ??
+                          throw new InvalidOperationException("LLM provider key not found. Set LLM_PROVIDER environment variable.");
+        
+        useGroq = provider switch
+        {
+            "GROQ" => true,
+            "OPENAI" => false,
+            _ => throw new InvalidOperationException("Invalid provider key: " + provider)
+        };
     }
 
     public async Task<string> StartNewGame()
@@ -62,15 +73,14 @@ public class ChessHub : Hub
             };
             _context.ChatMessages.Add(userMessage);
 
-            // Get AI response using Groq (with OpenAI fallback)
+            // Get AI response using Groq or OpenAI
             string aiResponse;
-            try
+            if (useGroq)
             {
                 aiResponse = await _groqService.GetChessResponseAsync(message, gameId);
             }
-            catch (Exception groqEx)
+            else
             {
-                _logger.LogWarning(groqEx, "Groq API failed, falling back to OpenAI");
                 aiResponse = await _openAiService.GetChessResponseAsync(message, gameId);
             }
 
