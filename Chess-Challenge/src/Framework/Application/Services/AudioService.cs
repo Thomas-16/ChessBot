@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
-using NLayer;
 using static ChessChallenge.Application.ConsoleHelper;
 
 namespace ChessChallenge.Application.Services
@@ -18,12 +17,10 @@ namespace ChessChallenge.Application.Services
         private AudioStream? streamingAudioStream;
         private bool isStreamingActive = false;
         private bool isStreamingPlaying = false;
-        private Queue<float[]> pcmChunkQueue = new(); // Decoded PCM samples
-        private MemoryStream mp3Buffer = new(); // Accumulates MP3 chunks for decoding
-        private MpegFile? mp3Decoder;
+        private Queue<byte[]> audioChunkQueue = new();
         private const int SampleRate = 44100;
         private const int Channels = 1; // Mono
-        private const int PcmChunkSize = 4096; // PCM samples per update
+        private const int MinBufferSizeToStart = 8192; // Start playback after buffering first chunk
 
         public bool IsPlaying => isPlaying;
 
@@ -154,8 +151,7 @@ namespace ChessChallenge.Application.Services
 
                 isStreamingActive = true;
                 isStreamingPlaying = false;
-                pcmChunkQueue.Clear();
-                mp3Buffer = new MemoryStream();
+                audioChunkQueue.Clear();
 
                 Log("🔊 Started streaming audio session", false, ConsoleColor.Cyan);
             }
@@ -165,7 +161,7 @@ namespace ChessChallenge.Application.Services
             }
         }
 
-        public void AddAudioChunk(byte[] mp3ChunkBytes)
+        public void AddAudioChunk(byte[] chunkBytes)
         {
             if (!isStreamingActive)
             {
@@ -175,47 +171,18 @@ namespace ChessChallenge.Application.Services
 
             try
             {
-                // Append MP3 chunk to buffer
-                mp3Buffer.Write(mp3ChunkBytes, 0, mp3ChunkBytes.Length);
+                // Queue the chunk
+                audioChunkQueue.Enqueue(chunkBytes);
 
-                // Try to decode accumulated MP3 data to PCM
-                mp3Buffer.Position = 0;
-
-                try
+                // Start playback after receiving first chunk
+                if (!isStreamingPlaying && audioChunkQueue.Count > 0)
                 {
-                    if (mp3Decoder == null)
+                    if (streamingAudioStream.HasValue)
                     {
-                        mp3Decoder = new MpegFile(mp3Buffer);
+                        Raylib.PlayAudioStream(streamingAudioStream.Value);
+                        isStreamingPlaying = true;
+                        Log($"🔊 Started streaming playback with first chunk ({chunkBytes.Length} bytes)", false, ConsoleColor.Green);
                     }
-
-                    // Decode PCM samples from MP3
-                    float[] pcmSamples = new float[PcmChunkSize];
-                    int samplesRead = mp3Decoder.ReadSamples(pcmSamples, 0, PcmChunkSize);
-
-                    if (samplesRead > 0)
-                    {
-                        // Trim array to actual samples read
-                        float[] trimmedSamples = new float[samplesRead];
-                        Array.Copy(pcmSamples, trimmedSamples, samplesRead);
-
-                        pcmChunkQueue.Enqueue(trimmedSamples);
-
-                        // Start playback after decoding first chunk
-                        if (!isStreamingPlaying && pcmChunkQueue.Count > 0)
-                        {
-                            if (streamingAudioStream.HasValue)
-                            {
-                                Raylib.PlayAudioStream(streamingAudioStream.Value);
-                                isStreamingPlaying = true;
-                                Log($"🔊 Started streaming playback", false, ConsoleColor.Green);
-                            }
-                        }
-                    }
-                }
-                catch
-                {
-                    // MP3 decoding failed (incomplete frame), wait for more data
-                    mp3Buffer.Position = mp3Buffer.Length;
                 }
             }
             catch (Exception ex)
@@ -226,7 +193,7 @@ namespace ChessChallenge.Application.Services
 
         public void UpdateStreamingAudio()
         {
-            if (!streamingAudioStream.HasValue || !isStreamingPlaying)
+            if (!isStreamingActive || !streamingAudioStream.HasValue || !isStreamingPlaying)
             {
                 return;
             }
@@ -234,22 +201,15 @@ namespace ChessChallenge.Application.Services
             try
             {
                 // Check if audio stream needs more data
-                if (Raylib.IsAudioStreamProcessed(streamingAudioStream.Value) && pcmChunkQueue.Count > 0)
+                if (Raylib.IsAudioStreamProcessed(streamingAudioStream.Value) && audioChunkQueue.Count > 0)
                 {
-                    float[] pcmSamples = pcmChunkQueue.Dequeue();
-
-                    // Convert float samples to 16-bit PCM for Raylib
-                    short[] pcm16Bit = new short[pcmSamples.Length];
-                    for (int i = 0; i < pcmSamples.Length; i++)
-                    {
-                        pcm16Bit[i] = (short)(pcmSamples[i] * 32767f);
-                    }
+                    byte[] chunk = audioChunkQueue.Dequeue();
 
                     unsafe
                     {
-                        fixed (short* dataPtr = pcm16Bit)
+                        fixed (byte* dataPtr = chunk)
                         {
-                            Raylib.UpdateAudioStream(streamingAudioStream.Value, dataPtr, pcm16Bit.Length);
+                            Raylib.UpdateAudioStream(streamingAudioStream.Value, dataPtr, chunk.Length / 2); // PCM 16-bit = 2 bytes per sample
                         }
                     }
                 }
@@ -267,15 +227,10 @@ namespace ChessChallenge.Application.Services
                 return;
             }
 
-            Log($"✅ Streaming audio finished, {pcmChunkQueue.Count} PCM chunks remaining in queue", false, ConsoleColor.Green);
+            Log($"✅ Streaming audio finished, {audioChunkQueue.Count} chunks remaining in queue", false, ConsoleColor.Green);
 
             // Mark as inactive but keep playing queued chunks
             isStreamingActive = false;
-
-            // Cleanup MP3 decoder
-            mp3Decoder = null;
-            mp3Buffer?.Dispose();
-            mp3Buffer = new MemoryStream();
         }
 
         private void StopStreamingAudio()
@@ -299,11 +254,7 @@ namespace ChessChallenge.Application.Services
 
             isStreamingActive = false;
             isStreamingPlaying = false;
-            pcmChunkQueue.Clear();
-
-            mp3Decoder = null;
-            mp3Buffer?.Dispose();
-            mp3Buffer = new MemoryStream();
+            audioChunkQueue.Clear();
         }
 
         public void Dispose()
