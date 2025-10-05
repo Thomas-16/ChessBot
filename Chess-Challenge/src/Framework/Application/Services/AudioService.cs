@@ -13,13 +13,14 @@ namespace ChessChallenge.Application.Services
         private bool isPlaying;
         private string? tempAudioFilePath;
 
-        // Streaming audio state
-        private List<byte> streamingAudioBuffer = new();
+        // Streaming audio state (using AudioStream for true streaming)
+        private AudioStream? streamingAudioStream;
         private bool isStreamingActive = false;
-        private bool hasStartedPlayback = false;
-        private FileStream? streamingFileStream;
-        private string? streamingTempFilePath;
-        private const int MinBufferSizeToStart = 8192; // Start playback after first chunk
+        private bool isStreamingPlaying = false;
+        private Queue<byte[]> audioChunkQueue = new();
+        private const int SampleRate = 44100;
+        private const int Channels = 1; // Mono
+        private const int MinBufferSizeToStart = 8192; // Start playback after buffering first chunk
 
         public bool IsPlaying => isPlaying;
 
@@ -134,21 +135,35 @@ namespace ChessChallenge.Application.Services
             StopAudio();
             StopStreamingAudio();
 
-            // Initialize streaming state
-            isStreamingActive = true;
-            hasStartedPlayback = false;
-            streamingAudioBuffer.Clear();
+            if (!Raylib.IsAudioDeviceReady())
+            {
+                Log("⚠️ Audio device not ready", false, ConsoleColor.Yellow);
+                return;
+            }
 
-            // Create temp file for streaming
-            streamingTempFilePath = Path.Combine(Path.GetTempPath(), $"tts_stream_{Guid.NewGuid()}.mp3");
-            streamingFileStream = new FileStream(streamingTempFilePath, FileMode.Create, FileAccess.Write, FileShare.Read);
+            try
+            {
+                // Create AudioStream for true streaming (PCM 16-bit, 44100Hz, Mono)
+                unsafe
+                {
+                    streamingAudioStream = Raylib.LoadAudioStream((uint)SampleRate, 16, (uint)Channels);
+                }
 
-            Log("🔊 Started streaming audio session", false, ConsoleColor.Cyan);
+                isStreamingActive = true;
+                isStreamingPlaying = false;
+                audioChunkQueue.Clear();
+
+                Log("🔊 Started streaming audio session", false, ConsoleColor.Cyan);
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Error starting streaming audio: {ex.Message}", false, ConsoleColor.Red);
+            }
         }
 
-        public async Task AddAudioChunk(byte[] chunkBytes)
+        public void AddAudioChunk(byte[] chunkBytes)
         {
-            if (!isStreamingActive || streamingFileStream == null)
+            if (!isStreamingActive)
             {
                 Log("⚠️ Cannot add audio chunk - streaming not active", false, ConsoleColor.Yellow);
                 return;
@@ -156,22 +171,52 @@ namespace ChessChallenge.Application.Services
 
             try
             {
-                // Write chunk to file immediately
-                await streamingFileStream.WriteAsync(chunkBytes, 0, chunkBytes.Length);
-                await streamingFileStream.FlushAsync();
-
-                streamingAudioBuffer.AddRange(chunkBytes);
+                // Queue the chunk
+                audioChunkQueue.Enqueue(chunkBytes);
 
                 // Start playback after receiving first chunk
-                if (!hasStartedPlayback && streamingAudioBuffer.Count >= MinBufferSizeToStart)
+                if (!isStreamingPlaying && audioChunkQueue.Count > 0)
                 {
-                    hasStartedPlayback = true;
-                    _ = Task.Run(() => StartStreamPlayback());
+                    if (streamingAudioStream.HasValue)
+                    {
+                        Raylib.PlayAudioStream(streamingAudioStream.Value);
+                        isStreamingPlaying = true;
+                        Log($"🔊 Started streaming playback with first chunk ({chunkBytes.Length} bytes)", false, ConsoleColor.Green);
+                    }
                 }
             }
             catch (Exception ex)
             {
                 Log($"❌ Error adding audio chunk: {ex.Message}", false, ConsoleColor.Red);
+            }
+        }
+
+        public void UpdateStreamingAudio()
+        {
+            if (!isStreamingActive || !streamingAudioStream.HasValue || !isStreamingPlaying)
+            {
+                return;
+            }
+
+            try
+            {
+                // Check if audio stream needs more data
+                if (Raylib.IsAudioStreamProcessed(streamingAudioStream.Value) && audioChunkQueue.Count > 0)
+                {
+                    byte[] chunk = audioChunkQueue.Dequeue();
+
+                    unsafe
+                    {
+                        fixed (byte* dataPtr = chunk)
+                        {
+                            Raylib.UpdateAudioStream(streamingAudioStream.Value, dataPtr, chunk.Length / 2); // PCM 16-bit = 2 bytes per sample
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Error updating streaming audio: {ex.Message}", false, ConsoleColor.Red);
             }
         }
 
@@ -182,111 +227,40 @@ namespace ChessChallenge.Application.Services
                 return;
             }
 
-            try
-            {
-                // Close the file stream so Raylib can read it
-                streamingFileStream?.Close();
-                streamingFileStream?.Dispose();
-                streamingFileStream = null;
+            Log($"✅ Streaming audio finished, {audioChunkQueue.Count} chunks remaining in queue", false, ConsoleColor.Green);
 
-                isStreamingActive = false;
-
-                Log($"✅ Streaming audio finished: {streamingAudioBuffer.Count} bytes total", false, ConsoleColor.Green);
-
-                // If we never started playback (very small audio), start it now
-                if (!hasStartedPlayback && streamingAudioBuffer.Count > 0)
-                {
-                    _ = Task.Run(() => StartStreamPlayback());
-                }
-            }
-            catch (Exception ex)
-            {
-                Log($"❌ Error finishing streaming audio: {ex.Message}", false, ConsoleColor.Red);
-                CleanupStreamingFile();
-            }
-        }
-
-        private void StartStreamPlayback()
-        {
-            if (string.IsNullOrEmpty(streamingTempFilePath) || !File.Exists(streamingTempFilePath))
-            {
-                Log("⚠️ Cannot start stream playback - file not found", false, ConsoleColor.Yellow);
-                return;
-            }
-
-            try
-            {
-                if (!Raylib.IsAudioDeviceReady())
-                {
-                    Log("⚠️ Audio device not ready", false, ConsoleColor.Yellow);
-                    return;
-                }
-
-                // Wait a bit for file to be readable
-                System.Threading.Thread.Sleep(50);
-
-                Music music = Raylib.LoadMusicStream(streamingTempFilePath);
-                music.looping = false;
-                Raylib.SetMusicVolume(music, 1.0f);
-                currentMusic = music;
-
-                Raylib.PlayMusicStream(currentMusic.Value);
-                isPlaying = true;
-                Log("🔊 Started streaming playback", false, ConsoleColor.Green);
-
-                // Update music stream in background
-                while (isPlaying && Raylib.IsMusicStreamPlaying(currentMusic.Value))
-                {
-                    Raylib.UpdateMusicStream(currentMusic.Value);
-                    System.Threading.Thread.Sleep(10);
-                }
-
-                // Cleanup after playback
-                StopAudio();
-                CleanupStreamingFile();
-                Log("✅ Streaming playback complete", false, ConsoleColor.Green);
-            }
-            catch (Exception ex)
-            {
-                Log($"❌ Error during streaming playback: {ex.Message}", false, ConsoleColor.Red);
-                StopAudio();
-                CleanupStreamingFile();
-            }
+            // Mark as inactive but keep playing queued chunks
+            isStreamingActive = false;
         }
 
         private void StopStreamingAudio()
         {
-            isStreamingActive = false;
-            hasStartedPlayback = false;
-
-            streamingFileStream?.Close();
-            streamingFileStream?.Dispose();
-            streamingFileStream = null;
-
-            streamingAudioBuffer.Clear();
-        }
-
-        private void CleanupStreamingFile()
-        {
-            if (!string.IsNullOrEmpty(streamingTempFilePath) && File.Exists(streamingTempFilePath))
+            if (streamingAudioStream.HasValue)
             {
                 try
                 {
-                    File.Delete(streamingTempFilePath);
-                    streamingTempFilePath = null;
+                    if (isStreamingPlaying)
+                    {
+                        Raylib.StopAudioStream(streamingAudioStream.Value);
+                    }
+                    Raylib.UnloadAudioStream(streamingAudioStream.Value);
+                    streamingAudioStream = null;
                 }
                 catch (Exception ex)
                 {
-                    Log($"⚠️ Failed to delete streaming temp file: {ex.Message}", false, ConsoleColor.Yellow);
+                    Log($"⚠️ Error stopping streaming audio: {ex.Message}", false, ConsoleColor.Yellow);
                 }
             }
+
+            isStreamingActive = false;
+            isStreamingPlaying = false;
+            audioChunkQueue.Clear();
         }
 
         public void Dispose()
         {
             StopAudio();
             StopStreamingAudio();
-            CleanupStreamingFile();
         }
     }
 }

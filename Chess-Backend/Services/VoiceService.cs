@@ -84,7 +84,8 @@ public class VoiceService
     {
         // ElevenLabs streaming text-to-speech API
         string voiceId = "21m00Tcm4TlvDq8ikWAM"; // Rachel voice
-        string url = $"https://api.elevenlabs.io/v1/text-to-speech/{voiceId}/stream?optimize_streaming_latency=3&output_format=mp3_44100_128";
+        // Use PCM format for true streaming (raw audio data, not compressed MP3)
+        string url = $"https://api.elevenlabs.io/v1/text-to-speech/{voiceId}/stream?optimize_streaming_latency=3&output_format=pcm_44100";
 
         var payload = new
         {

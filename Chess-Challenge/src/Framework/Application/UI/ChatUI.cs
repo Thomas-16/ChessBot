@@ -80,6 +80,12 @@ namespace ChessChallenge.Application
             HandleKeyboardInput();
             UpdateTypingEffect();
             CheckResponseTimeout();
+
+            // Update streaming audio (feeds queued chunks to AudioStream)
+            if (audioService != null)
+            {
+                audioService.UpdateStreamingAudio();
+            }
         }
 
         private void UpdateTypingEffect()
@@ -502,7 +508,7 @@ namespace ChessChallenge.Application
             AddMessage("System", $"Error: {error}", false);
         }
 
-        private async void OnReceiveAudioChunk(object chunkData)
+        private void OnReceiveAudioChunk(object chunkData)
         {
             try
             {
@@ -526,7 +532,7 @@ namespace ChessChallenge.Application
                 {
                     // Decode and add chunk
                     byte[] chunkBytes = Convert.FromBase64String(audioChunkBase64);
-                    await audioService.AddAudioChunk(chunkBytes);
+                    audioService.AddAudioChunk(chunkBytes);
                 }
             }
             catch (Exception ex)
