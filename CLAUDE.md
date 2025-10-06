@@ -93,7 +93,7 @@ docker run -p 5000:5000 chess-backend
 
 2. **Services:**
    - `GroqService.cs`: Groq API integration (primary, fastest)
-   - `AIService.cs`: OpenAI integration (fallback)
+   - `OpenAIService.cs`: OpenAI integration
    - `VoiceService.cs`: ElevenLabs TTS + OpenAI Whisper STT
    - Both AI services use shared prompt from `Config/AIPrompts.cs`
 
