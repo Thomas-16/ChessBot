@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Chess_Backend.Config;
+using Chess_Backend.Models;
 
 namespace Chess_Backend.Services;
 
@@ -21,18 +22,30 @@ public class GroqService
                   throw new InvalidOperationException("Groq API key not found. Set GROQ_API_KEY environment variable.");
     }
 
-    public async Task<string> GetChessResponseAsync(string userMessage, string gameId)
+    public async Task<string> GetChessResponseAsync(string userMessage, string gameId, List<ChatMessage> conversationHistory)
     {
         try
         {
+            // Build messages array: system prompt → conversation history → current message
+            var messages = new List<object>
+            {
+                new { role = "system", content = AIPrompts.ChessOpponentSystemPrompt }
+            };
+
+            // Add conversation history
+            foreach (var msg in conversationHistory)
+            {
+                string role = msg.Speaker == "User" ? "user" : "assistant";
+                messages.Add(new { role, content = msg.Message });
+            }
+
+            // Add current user message
+            messages.Add(new { role = "user", content = userMessage });
+
             var requestBody = new
             {
                 model = "meta-llama/llama-4-scout-17b-16e-instruct",
-                messages = new[]
-                {
-                    new { role = "system", content = AIPrompts.ChessOpponentSystemPrompt },
-                    new { role = "user", content = userMessage }
-                },
+                messages,
                 temperature = 0.7,
                 max_tokens = 80
             };

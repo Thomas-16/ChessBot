@@ -2,6 +2,7 @@ using System.ClientModel;
 using OpenAI.Chat;
 using System.Collections.Generic;
 using Chess_Backend.Config;
+using Chess_Backend.Models;
 
 namespace Chess_Backend.Services;
 
@@ -20,15 +21,31 @@ public class OpenAIService
         _logger = logger;
     }
 
-    public async Task<string> GetChessResponseAsync(string userMessage, string gameId)
+    public async Task<string> GetChessResponseAsync(string userMessage, string gameId, List<Models.ChatMessage> conversationHistory)
     {
         try
         {
-            List<ChatMessage> messages = new List<ChatMessage>
+            // Build messages list: system prompt → conversation history → current message
+            List<OpenAI.Chat.ChatMessage> messages = new List<OpenAI.Chat.ChatMessage>
             {
-                new SystemChatMessage(AIPrompts.ChessOpponentSystemPrompt),
-                new UserChatMessage(userMessage)
+                new SystemChatMessage(AIPrompts.ChessOpponentSystemPrompt)
             };
+
+            // Add conversation history
+            foreach (var msg in conversationHistory)
+            {
+                if (msg.Speaker == "User")
+                {
+                    messages.Add(new UserChatMessage(msg.Message));
+                }
+                else
+                {
+                    messages.Add(new AssistantChatMessage(msg.Message));
+                }
+            }
+
+            // Add current user message
+            messages.Add(new UserChatMessage(userMessage));
 
             ClientResult<ChatCompletion>? completion = await _chatClient.CompleteChatAsync(messages);
             string response = completion.Value.Content[0].Text ?? "I'm having trouble thinking right now. Let's focus on the game!";

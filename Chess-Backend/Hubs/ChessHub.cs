@@ -63,6 +63,14 @@ public class ChessHub : Hub
                 throw new HubException("Game not found");
             }
 
+            // Get conversation history (last 6 messages)
+            List<ChatMessage> conversationHistory = await _context.ChatMessages
+                .Where(m => m.GameId == gameId)
+                .OrderByDescending(m => m.Timestamp)
+                .Take(6)
+                .OrderBy(m => m.Timestamp)
+                .ToListAsync();
+
             // Save user message
             ChatMessage userMessage = new ChatMessage
             {
@@ -73,15 +81,15 @@ public class ChessHub : Hub
             };
             _context.ChatMessages.Add(userMessage);
 
-            // Get AI response using Groq or OpenAI
+            // Get AI response using Groq or OpenAI with conversation history
             string aiResponse;
             if (useGroq)
             {
-                aiResponse = await _groqService.GetChessResponseAsync(message, gameId);
+                aiResponse = await _groqService.GetChessResponseAsync(message, gameId, conversationHistory);
             }
             else
             {
-                aiResponse = await _openAiService.GetChessResponseAsync(message, gameId);
+                aiResponse = await _openAiService.GetChessResponseAsync(message, gameId, conversationHistory);
             }
 
             // Save AI message
