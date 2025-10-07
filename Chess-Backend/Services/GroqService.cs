@@ -47,7 +47,7 @@ public class GroqService
                 model = "meta-llama/llama-4-scout-17b-16e-instruct",
                 messages,
                 temperature = 0.7,
-                max_tokens = 80
+                max_tokens = 50
             };
 
             var jsonContent = JsonSerializer.Serialize(requestBody);

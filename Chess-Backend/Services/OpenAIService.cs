@@ -50,7 +50,7 @@ public class OpenAIService
 
             var options = new ChatCompletionOptions
             {
-                MaxOutputTokenCount = 100
+                MaxOutputTokenCount = 50
             };
 
             ClientResult<ChatCompletion>? completion = await _chatClient.CompleteChatAsync(messages, options);
