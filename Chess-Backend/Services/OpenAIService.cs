@@ -23,6 +23,7 @@ public class OpenAIService
 
     public async Task<string> GetChessResponseAsync(string userMessage, string gameId, List<Models.ChatMessage> conversationHistory)
     {
+        var startTime = DateTime.UtcNow;
         try
         {
             // Build messages list: system prompt → conversation history → current message
@@ -47,9 +48,16 @@ public class OpenAIService
             // Add current user message
             messages.Add(new UserChatMessage(userMessage));
 
-            ClientResult<ChatCompletion>? completion = await _chatClient.CompleteChatAsync(messages);
+            var options = new ChatCompletionOptions
+            {
+                MaxOutputTokenCount = 100
+            };
+
+            ClientResult<ChatCompletion>? completion = await _chatClient.CompleteChatAsync(messages, options);
             string response = completion.Value.Content[0].Text ?? "I'm having trouble thinking right now. Let's focus on the game!";
 
+            var elapsedMs = (DateTime.UtcNow - startTime).TotalMilliseconds;
+            _logger.LogInformation("⏱️ OpenAI API call took {ElapsedMs}ms for game {GameId}", elapsedMs, gameId);
             _logger.LogInformation("Generated AI response for game {GameId}: {Response}", gameId, response);
             return response;
         }
