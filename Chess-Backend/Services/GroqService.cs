@@ -22,11 +22,11 @@ public class GroqService
                   throw new InvalidOperationException("Groq API key not found. Set GROQ_API_KEY environment variable.");
     }
 
-    public async Task<string> GetChessResponseAsync(string userMessage, string gameId, List<ChatMessage> conversationHistory)
+    public async Task<string> GetChessResponseAsync(string userMessage, string gameId, List<ChatMessage> conversationHistory, ChessPositionContext? context = null)
     {
         try
         {
-            // Build messages array: system prompt → conversation history → current message
+            // Build messages array: system prompt → conversation history → current message with context
             var messages = new List<object>
             {
                 new { role = "system", content = AIPrompts.ChessOpponentSystemPrompt }
@@ -39,8 +39,11 @@ public class GroqService
                 messages.Add(new { role, content = msg.Message });
             }
 
-            // Add current user message
-            messages.Add(new { role = "user", content = userMessage });
+            // Format user message with position context
+            string formattedMessage = FormatMessageWithContext(userMessage, context);
+
+            // Add current user message with context
+            messages.Add(new { role = "user", content = formattedMessage });
 
             var requestBody = new
             {
@@ -83,6 +86,54 @@ public class GroqService
             _logger.LogError(ex, "Error generating Groq response for game {GameId}", gameId);
             return "I'm having trouble thinking right now. Let's focus on the game!";
         }
+    }
+
+    private string FormatMessageWithContext(string userMessage, ChessPositionContext? context)
+    {
+        if (context == null)
+        {
+            return userMessage;
+        }
+
+        var contextParts = new List<string>();
+
+        // Player color and move info
+        contextParts.Add($"You: {context.PlayerColor}");
+        contextParts.Add($"Move {context.MoveNumber} ({context.TurnToMove} to move)");
+
+        // Material difference
+        int materialDiff = context.PlayerMaterialCentipawns - context.OpponentMaterialCentipawns;
+        string materialSign = materialDiff > 0 ? "+" : "";
+        contextParts.Add($"Material: {materialSign}{materialDiff}cp");
+
+        // Piece counts
+        string playerPieces = string.Join("+", context.PlayerPieces);
+        string opponentPieces = string.Join("+", context.OpponentPieces);
+        contextParts.Add($"(You: {playerPieces}, Opp: {opponentPieces})");
+
+        // Recent moves
+        if (context.RecentMoves != null && context.RecentMoves.Length > 0)
+        {
+            contextParts.Add($"Last moves: {string.Join(", ", context.RecentMoves)}");
+        }
+
+        // Game phase
+        contextParts.Add($"Phase: {context.GamePhase}");
+
+        // Check status (only if in check)
+        if (context.IsInCheck)
+        {
+            contextParts.Add("In check!");
+        }
+
+        // Legal move count (only if cramped)
+        if (context.LegalMoveCount.HasValue)
+        {
+            contextParts.Add($"Only {context.LegalMoveCount} legal moves");
+        }
+
+        string contextString = "[Position] " + string.Join(", ", contextParts);
+        return $"{contextString}\n{userMessage}";
     }
 
     // Response models for JSON deserialization

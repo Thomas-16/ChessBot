@@ -2,6 +2,7 @@ using System;
 using System.Net.Http;
 using System.Threading.Tasks;
 using ChessChallenge.Application.Config;
+using ChessChallenge.Application.Models;
 using static ChessChallenge.Application.ConsoleHelper;
 
 namespace ChessChallenge.Application.Services
@@ -65,14 +66,14 @@ namespace ChessChallenge.Application.Services
             return await _signalRService.SaveGameResultAsync(gameId, pgn, result);
         }
 
-        public async Task<bool> SendChatMessageAsync(string gameId, string message)
+        public async Task<bool> SendChatMessageAsync(string gameId, string message, ChessPositionContext? context = null)
         {
             if (!_config.EnableBackendIntegration || !IsConnected || string.IsNullOrEmpty(gameId))
             {
                 return false;
             }
 
-            return await _signalRService.SendChatMessageAsync(gameId, message);
+            return await _signalRService.SendChatMessageAsync(gameId, message, context);
         }
 
         public void RegisterChatResponseHandler(Action<object> handler)

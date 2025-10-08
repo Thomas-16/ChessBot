@@ -52,7 +52,7 @@ public class ChessHub : Hub
         }
     }
 
-    public async Task SendChatMessage(string gameId, string message)
+    public async Task SendChatMessage(string gameId, string message, ChessPositionContext? context = null)
     {
         try
         {
@@ -81,15 +81,15 @@ public class ChessHub : Hub
             };
             _context.ChatMessages.Add(userMessage);
 
-            // Get AI response using Groq or OpenAI with conversation history
+            // Get AI response using Groq or OpenAI with conversation history and position context
             string aiResponse;
             if (useGroq)
             {
-                aiResponse = await _groqService.GetChessResponseAsync(message, gameId, conversationHistory);
+                aiResponse = await _groqService.GetChessResponseAsync(message, gameId, conversationHistory, context);
             }
             else
             {
-                aiResponse = await _openAiService.GetChessResponseAsync(message, gameId, conversationHistory);
+                aiResponse = await _openAiService.GetChessResponseAsync(message, gameId, conversationHistory, context);
             }
 
             // Save AI message

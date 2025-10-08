@@ -22,6 +22,7 @@ namespace ChessChallenge.Application
         private readonly GameStorageService? gameStorage;
         private readonly BackendApiService? backendApi;
         private readonly AudioService? audioService;
+        private readonly Func<ChessPositionContext?>? contextExtractor;
 
         // Typing effect
         private float lastTypingUpdate = 0f;
@@ -49,11 +50,12 @@ namespace ChessChallenge.Application
         private readonly float messagePadding = 10f;
         private readonly float bubblePadding = 12f;
 
-        public ChatUI(GameStorageService? gameStorage = null, BackendApiService? backendApi = null, AudioService? audioService = null)
+        public ChatUI(GameStorageService? gameStorage = null, BackendApiService? backendApi = null, AudioService? audioService = null, Func<ChessPositionContext?>? contextExtractor = null)
         {
             this.gameStorage = gameStorage;
             this.backendApi = backendApi;
             this.audioService = audioService;
+            this.contextExtractor = contextExtractor;
 
             // Register backend handlers if available
             if (backendApi != null)
@@ -616,8 +618,11 @@ namespace ChessChallenge.Application
                 pendingResponseStartTime = (float)Raylib.GetTime();
                 lastRequestSentTime = DateTime.UtcNow;
 
+                // Extract position context
+                ChessPositionContext? context = contextExtractor?.Invoke();
+
                 // Send message to backend
-                bool success = await backendApi.SendChatMessageAsync(gameId, messageText);
+                bool success = await backendApi.SendChatMessageAsync(gameId, messageText, context);
 
                 if (!success)
                 {

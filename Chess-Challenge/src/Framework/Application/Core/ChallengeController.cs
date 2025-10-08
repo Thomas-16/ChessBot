@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ChessChallenge.Application.Services;
+using ChessChallenge.Application.Models;
 using Microsoft.Extensions.DependencyInjection;
 using static ChessChallenge.Application.Settings;
 using static ChessChallenge.Application.ConsoleHelper;
@@ -83,8 +84,8 @@ namespace ChessChallenge.Application
             backendApi = Program.ServiceProvider?.GetService<BackendApiService>();
             audioService = Program.ServiceProvider?.GetService<AudioService>();
 
-            // Initialize ChatUI with services
-            chatUI = new ChatUI(gameStorage, backendApi, audioService);
+            // Initialize ChatUI with services and context extractor
+            chatUI = new ChatUI(gameStorage, backendApi, audioService, GetCurrentPositionContext);
 
             BotStatsA = new BotMatchStats("IBot");
             BotStatsB = new BotMatchStats("IBot");
@@ -516,6 +517,142 @@ namespace ChessChallenge.Application
             public int NumIllegalMoves;
 
             public BotMatchStats(string name) => BotName = name;
+        }
+
+        public ChessPositionContext? GetCurrentPositionContext()
+        {
+            if (!isPlaying || board == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                // Determine player color
+                bool humanIsWhite = PlayerWhite.IsHuman;
+                bool humanIsBlack = PlayerBlack.IsHuman;
+
+                if (!humanIsWhite && !humanIsBlack)
+                {
+                    // No human player
+                    return null;
+                }
+
+                string playerColor = humanIsWhite ? "White" : "Black";
+                int playerColorIndex = humanIsWhite ? Board.WhiteIndex : Board.BlackIndex;
+                int opponentColorIndex = humanIsWhite ? Board.BlackIndex : Board.WhiteIndex;
+
+                // Calculate move number
+                int moveNumber = (board.plyCount / 2) + 1;
+
+                // Get turn to move
+                string turnToMove = board.IsWhiteToMove ? "White" : "Black";
+
+                // Count material
+                var (playerMaterial, playerPieces) = CountMaterial(playerColorIndex);
+                var (opponentMaterial, opponentPieces) = CountMaterial(opponentColorIndex);
+
+                // Get recent moves (last 5)
+                string[] recentMoves = GetRecentMoves(5);
+
+                // Determine game phase
+                string gamePhase = DetermineGamePhase(moveNumber);
+
+                // Check if in check
+                bool isInCheck = board.IsInCheck();
+
+                // Count legal moves (only if < 5)
+                var legalMoves = moveGenerator.GenerateMoves(board);
+                int? legalMoveCount = legalMoves.Length < 5 ? legalMoves.Length : null;
+
+                return new ChessPositionContext
+                {
+                    PlayerColor = playerColor,
+                    MoveNumber = moveNumber,
+                    TurnToMove = turnToMove,
+                    PlayerMaterialCentipawns = playerMaterial,
+                    OpponentMaterialCentipawns = opponentMaterial,
+                    PlayerPieces = playerPieces,
+                    OpponentPieces = opponentPieces,
+                    RecentMoves = recentMoves,
+                    GamePhase = gamePhase,
+                    IsInCheck = isInCheck,
+                    LegalMoveCount = legalMoveCount
+                };
+            }
+            catch (Exception ex)
+            {
+                Log($"Error creating position context: {ex.Message}", false, ConsoleColor.Red);
+                return null;
+            }
+        }
+
+        private (int material, string[] pieces) CountMaterial(int colorIndex)
+        {
+            int material = 0;
+            var piecesList = new System.Collections.Generic.List<string>();
+
+            // Piece values from Evaluation
+            int[] pieceValues = { 0, 100, 320, 330, 500, 900, 0 }; // Pawn, Knight, Bishop, Rook, Queen, King
+
+            // Count pawns
+            int pawnCount = board.pawns[colorIndex].Count;
+            material += pawnCount * pieceValues[PieceHelper.Pawn];
+            if (pawnCount > 0) piecesList.Add($"{pawnCount}P");
+
+            // Count knights
+            int knightCount = board.knights[colorIndex].Count;
+            material += knightCount * pieceValues[PieceHelper.Knight];
+            if (knightCount > 0) piecesList.Add($"{knightCount}N");
+
+            // Count bishops
+            int bishopCount = board.bishops[colorIndex].Count;
+            material += bishopCount * pieceValues[PieceHelper.Bishop];
+            if (bishopCount > 0) piecesList.Add($"{bishopCount}B");
+
+            // Count rooks
+            int rookCount = board.rooks[colorIndex].Count;
+            material += rookCount * pieceValues[PieceHelper.Rook];
+            if (rookCount > 0) piecesList.Add($"{rookCount}R");
+
+            // Count queens
+            int queenCount = board.queens[colorIndex].Count;
+            material += queenCount * pieceValues[PieceHelper.Queen];
+            if (queenCount > 0) piecesList.Add($"{queenCount}Q");
+
+            return (material, piecesList.ToArray());
+        }
+
+        private string[] GetRecentMoves(int count)
+        {
+            if (board.AllGameMoves == null || board.AllGameMoves.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            // Create a copy of the board to calculate move notation
+            Board tempBoard = new Board();
+            tempBoard.LoadPosition(board.GameStartFen);
+
+            var recentMoves = new System.Collections.Generic.List<string>();
+            int startIndex = Math.Max(0, board.AllGameMoves.Count - count);
+
+            for (int i = startIndex; i < board.AllGameMoves.Count; i++)
+            {
+                Move move = board.AllGameMoves[i];
+                string moveSan = MoveUtility.GetMoveNameSAN(move, tempBoard);
+                recentMoves.Add(moveSan);
+                tempBoard.MakeMove(move, false);
+            }
+
+            return recentMoves.ToArray();
+        }
+
+        private string DetermineGamePhase(int moveNumber)
+        {
+            if (moveNumber < 10) return "Opening";
+            if (moveNumber > 40) return "Endgame";
+            return "Middlegame";
         }
 
         public void Release()
