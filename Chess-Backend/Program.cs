@@ -30,7 +30,7 @@ builder.Services.AddDbContext<ChessDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 // Register services
-builder.Services.AddScoped<OpenAIService>();
+builder.Services.AddSingleton<OpenAIService>();
 builder.Services.AddScoped<GroqService>();
 builder.Services.AddHttpClient<GroqService>();
 builder.Services.AddScoped<VoiceService>();
