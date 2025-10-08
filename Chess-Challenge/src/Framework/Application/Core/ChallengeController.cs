@@ -529,8 +529,8 @@ namespace ChessChallenge.Application
             try
             {
                 // Determine player color
-                bool humanIsWhite = PlayerWhite.IsHuman;
-                bool humanIsBlack = PlayerBlack.IsHuman;
+                bool humanIsWhite = PlayerWhite?.IsHuman ?? false;
+                bool humanIsBlack = PlayerBlack?.IsHuman ?? false;
 
                 if (!humanIsWhite && !humanIsBlack)
                 {
@@ -583,6 +583,7 @@ namespace ChessChallenge.Application
             catch (Exception ex)
             {
                 Log($"Error creating position context: {ex.Message}", false, ConsoleColor.Red);
+                Log($"Stack trace: {ex.StackTrace}", false, ConsoleColor.Red);
                 return null;
             }
         }
@@ -595,30 +596,41 @@ namespace ChessChallenge.Application
             // Piece values from Evaluation
             int[] pieceValues = { 0, 100, 320, 330, 500, 900, 0 }; // Pawn, Knight, Bishop, Rook, Queen, King
 
-            // Count pawns
-            int pawnCount = board.pawns[colorIndex].Count;
-            material += pawnCount * pieceValues[PieceHelper.Pawn];
-            if (pawnCount > 0) piecesList.Add($"{pawnCount}P");
+            // Null checks for piece lists
+            if (board.pawns.Length > colorIndex)
+            {
+                int pawnCount = board.pawns[colorIndex].Count;
+                material += pawnCount * pieceValues[PieceHelper.Pawn];
+                if (pawnCount > 0) piecesList.Add($"{pawnCount}P");
+            }
 
-            // Count knights
-            int knightCount = board.knights[colorIndex].Count;
-            material += knightCount * pieceValues[PieceHelper.Knight];
-            if (knightCount > 0) piecesList.Add($"{knightCount}N");
+            if (board.knights.Length > colorIndex)
+            {
+                int knightCount = board.knights[colorIndex].Count;
+                material += knightCount * pieceValues[PieceHelper.Knight];
+                if (knightCount > 0) piecesList.Add($"{knightCount}N");
+            }
 
-            // Count bishops
-            int bishopCount = board.bishops[colorIndex].Count;
-            material += bishopCount * pieceValues[PieceHelper.Bishop];
-            if (bishopCount > 0) piecesList.Add($"{bishopCount}B");
+            if (board.bishops.Length > colorIndex)
+            {
+                int bishopCount = board.bishops[colorIndex].Count;
+                material += bishopCount * pieceValues[PieceHelper.Bishop];
+                if (bishopCount > 0) piecesList.Add($"{bishopCount}B");
+            }
 
-            // Count rooks
-            int rookCount = board.rooks[colorIndex].Count;
-            material += rookCount * pieceValues[PieceHelper.Rook];
-            if (rookCount > 0) piecesList.Add($"{rookCount}R");
+            if (board.rooks.Length > colorIndex)
+            {
+                int rookCount = board.rooks[colorIndex].Count;
+                material += rookCount * pieceValues[PieceHelper.Rook];
+                if (rookCount > 0) piecesList.Add($"{rookCount}R");
+            }
 
-            // Count queens
-            int queenCount = board.queens[colorIndex].Count;
-            material += queenCount * pieceValues[PieceHelper.Queen];
-            if (queenCount > 0) piecesList.Add($"{queenCount}Q");
+            if (board.queens.Length > colorIndex)
+            {
+                int queenCount = board.queens[colorIndex].Count;
+                material += queenCount * pieceValues[PieceHelper.Queen];
+                if (queenCount > 0) piecesList.Add($"{queenCount}Q");
+            }
 
             return (material, piecesList.ToArray());
         }
@@ -630,22 +642,25 @@ namespace ChessChallenge.Application
                 return Array.Empty<string>();
             }
 
-            // Create a copy of the board to calculate move notation
-            Board tempBoard = new Board();
-            tempBoard.LoadPosition(board.GameStartFen);
-
-            var recentMoves = new System.Collections.Generic.List<string>();
-            int startIndex = Math.Max(0, board.AllGameMoves.Count - count);
-
-            for (int i = startIndex; i < board.AllGameMoves.Count; i++)
+            try
             {
-                Move move = board.AllGameMoves[i];
-                string moveSan = MoveUtility.GetMoveNameSAN(move, tempBoard);
-                recentMoves.Add(moveSan);
-                tempBoard.MakeMove(move, false);
-            }
+                var recentMoves = new System.Collections.Generic.List<string>();
+                int startIndex = Math.Max(0, board.AllGameMoves.Count - count);
 
-            return recentMoves.ToArray();
+                for (int i = startIndex; i < board.AllGameMoves.Count; i++)
+                {
+                    Move move = board.AllGameMoves[i];
+                    string moveUci = MoveUtility.GetMoveNameUCI(move);
+                    recentMoves.Add(moveUci);
+                }
+
+                return recentMoves.ToArray();
+            }
+            catch (Exception ex)
+            {
+                Log($"Error getting recent moves: {ex.Message}", false, ConsoleColor.Yellow);
+                return Array.Empty<string>();
+            }
         }
 
         private string DetermineGamePhase(int moveNumber)
