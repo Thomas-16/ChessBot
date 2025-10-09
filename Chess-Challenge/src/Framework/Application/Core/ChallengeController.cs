@@ -528,7 +528,7 @@ namespace ChessChallenge.Application
 
             try
             {
-                // Determine player color
+                // Determine player color (AI's perspective, not human's)
                 bool humanIsWhite = PlayerWhite?.IsHuman ?? false;
                 bool humanIsBlack = PlayerBlack?.IsHuman ?? false;
 
@@ -538,9 +538,10 @@ namespace ChessChallenge.Application
                     return null;
                 }
 
-                string playerColor = humanIsWhite ? "White" : "Black";
-                int playerColorIndex = humanIsWhite ? Board.WhiteIndex : Board.BlackIndex;
-                int opponentColorIndex = humanIsWhite ? Board.BlackIndex : Board.WhiteIndex;
+                // Context is sent TO the AI, so "You" refers to AI
+                string aiColor = humanIsWhite ? "Black" : "White";
+                int aiColorIndex = humanIsWhite ? Board.BlackIndex : Board.WhiteIndex;
+                int humanColorIndex = humanIsWhite ? Board.WhiteIndex : Board.BlackIndex;
 
                 // Calculate move number
                 int moveNumber = (board.plyCount / 2) + 1;
@@ -548,9 +549,9 @@ namespace ChessChallenge.Application
                 // Get turn to move
                 string turnToMove = board.IsWhiteToMove ? "White" : "Black";
 
-                // Count material
-                var (playerMaterial, playerPieces) = CountMaterial(playerColorIndex);
-                var (opponentMaterial, opponentPieces) = CountMaterial(opponentColorIndex);
+                // Count material (AI's material vs human's material)
+                var (aiMaterial, aiPieces) = CountMaterial(aiColorIndex);
+                var (humanMaterial, humanPieces) = CountMaterial(humanColorIndex);
 
                 // Get recent moves (last 5)
                 string[] recentMoves = GetRecentMoves(5);
@@ -567,13 +568,13 @@ namespace ChessChallenge.Application
 
                 return new ChessPositionContext
                 {
-                    PlayerColor = playerColor,
+                    PlayerColor = aiColor,
                     MoveNumber = moveNumber,
                     TurnToMove = turnToMove,
-                    PlayerMaterialCentipawns = playerMaterial,
-                    OpponentMaterialCentipawns = opponentMaterial,
-                    PlayerPieces = playerPieces,
-                    OpponentPieces = opponentPieces,
+                    PlayerMaterialCentipawns = aiMaterial,
+                    OpponentMaterialCentipawns = humanMaterial,
+                    PlayerPieces = aiPieces,
+                    OpponentPieces = humanPieces,
                     RecentMoves = recentMoves,
                     GamePhase = gamePhase,
                     IsInCheck = isInCheck,
@@ -647,11 +648,30 @@ namespace ChessChallenge.Application
                 var recentMoves = new System.Collections.Generic.List<string>();
                 int startIndex = Math.Max(0, board.AllGameMoves.Count - count);
 
+                // Create a board copy up to the starting move
+                Board tempBoard = new Board();
+                if (string.IsNullOrEmpty(board.GameStartFen))
+                {
+                    tempBoard.LoadPosition(FenUtility.StartPositionFEN);
+                }
+                else
+                {
+                    tempBoard.LoadPosition(board.GameStartFen);
+                }
+
+                // Replay all moves up to startIndex
+                for (int i = 0; i < startIndex; i++)
+                {
+                    tempBoard.MakeMove(board.AllGameMoves[i], false);
+                }
+
+                // Get SAN notation for recent moves
                 for (int i = startIndex; i < board.AllGameMoves.Count; i++)
                 {
                     Move move = board.AllGameMoves[i];
-                    string moveUci = MoveUtility.GetMoveNameUCI(move);
-                    recentMoves.Add(moveUci);
+                    string moveSan = MoveUtility.GetMoveNameSAN(move, tempBoard);
+                    recentMoves.Add(moveSan);
+                    tempBoard.MakeMove(move, false);
                 }
 
                 return recentMoves.ToArray();
@@ -659,7 +679,21 @@ namespace ChessChallenge.Application
             catch (Exception ex)
             {
                 Log($"Error getting recent moves: {ex.Message}", false, ConsoleColor.Yellow);
-                return Array.Empty<string>();
+                // Fallback to UCI notation
+                try
+                {
+                    var recentMoves = new System.Collections.Generic.List<string>();
+                    int startIndex = Math.Max(0, board.AllGameMoves.Count - count);
+                    for (int i = startIndex; i < board.AllGameMoves.Count; i++)
+                    {
+                        recentMoves.Add(MoveUtility.GetMoveNameUCI(board.AllGameMoves[i]));
+                    }
+                    return recentMoves.ToArray();
+                }
+                catch
+                {
+                    return Array.Empty<string>();
+                }
             }
         }
 
