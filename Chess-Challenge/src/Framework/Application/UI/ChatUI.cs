@@ -658,6 +658,9 @@ namespace ChessChallenge.Application
                 string message = jsonElement.GetProperty("message").GetString() ?? "No response";
                 string? audioBase64 = jsonElement.TryGetProperty("audio", out JsonElement audioProp) ? audioProp.GetString() : null;
 
+                // Sanitize message for font compatibility (replace smart quotes/dashes with ASCII equivalents)
+                message = SanitizeTextForFont(message);
+
                 Log($"💬 Received AI response ({responseTimeMs:F0}ms): {message}", false, ConsoleColor.Green);
 
                 // Find and replace placeholder message
@@ -799,6 +802,20 @@ namespace ChessChallenge.Application
 
             // Consider "at bottom" if within 10 pixels of bottom position
             return scrollOffset <= bottomScrollOffset + 10f;
+        }
+
+        private string SanitizeTextForFont(string text)
+        {
+            // Replace Unicode punctuation with ASCII equivalents for SDF font compatibility
+            return text
+                .Replace('\u2019', '\'')  // Smart single quote → apostrophe (39)
+                .Replace('\u2018', '\'')  // Smart opening single quote → apostrophe (39)
+                .Replace('\u201C', '"')   // Smart opening double quote → quote (34)
+                .Replace('\u201D', '"')   // Smart closing double quote → quote (34)
+                .Replace('\u2013', '-')   // En dash → hyphen (45)
+                .Replace('\u2014', '-')   // Em dash → hyphen (45)
+                .Replace("\u2026", "...") // Ellipsis → three dots
+                .Replace('\u2022', '*');  // Bullet → asterisk (42)
         }
     }
 }
