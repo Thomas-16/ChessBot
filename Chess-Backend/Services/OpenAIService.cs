@@ -71,7 +71,7 @@ public class OpenAIService
         }
     }
 
-    private string FormatMessageWithContext(string userMessage, ChessPositionContext? context)
+    public static string FormatMessageWithContext(string userMessage, ChessPositionContext? context)
     {
         if (context == null)
         {
@@ -95,7 +95,7 @@ public class OpenAIService
         contextParts.Add($"(You: {playerPieces}, Opp: {opponentPieces})");
 
         // Recent moves
-        if (context.RecentMoves != null && context.RecentMoves.Length > 0)
+        if (context.RecentMoves.Length > 0)
         {
             contextParts.Add($"Last moves: {string.Join(", ", context.RecentMoves)}");
         }
@@ -115,7 +115,7 @@ public class OpenAIService
             contextParts.Add($"Only {context.LegalMoveCount} legal moves");
         }
 
-        string contextString = "[Position] " + string.Join(", ", contextParts);
-        return $"{contextString}\n{userMessage}";
+        string contextString = "[Position from the perspective of YOU, the AI] " + string.Join(", ", contextParts);
+        return $"{contextString}\nUser message: {userMessage}";
     }
 }
