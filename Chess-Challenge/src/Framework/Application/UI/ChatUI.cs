@@ -434,7 +434,7 @@ namespace ChessChallenge.Application
         {
             Rectangle buttonRect = new Rectangle(x, y, width, height);
             bool mouseOver = MouseInRect(buttonRect);
-            bool canSend = inputText.Length > 0;
+            bool canSend = inputText.Length > 0 && pendingResponseMessage == null; // Disable if waiting for response
             bool isPressed = mouseOver && Raylib.IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT);
 
             // Smooth hover/press animations
@@ -608,8 +608,8 @@ namespace ChessChallenge.Application
                 inputText.Remove(inputText.Length - 1, 1);
             }
 
-            // Handle enter key
-            if (Raylib.IsKeyPressed(KeyboardKey.KEY_ENTER) && inputText.Length > 0)
+            // Handle enter key (only if not waiting for response)
+            if (Raylib.IsKeyPressed(KeyboardKey.KEY_ENTER) && inputText.Length > 0 && pendingResponseMessage == null)
             {
                 SendMessage();
             }
@@ -619,6 +619,19 @@ namespace ChessChallenge.Application
         {
             string messageText = inputText.ToString().Trim();
             if (string.IsNullOrWhiteSpace(messageText)) return;
+
+            // Stop any ongoing typing effects and audio playback
+            foreach (var message in messages)
+            {
+                if (message.IsTyping)
+                {
+                    message.IsTyping = false;
+                    message.VisibleCharCount = message.Message.Length; // Show full message immediately
+                }
+            }
+
+            // Stop audio playback
+            audioService?.StopAudio();
 
             // Add user message
             AddMessage("User", messageText, true);
