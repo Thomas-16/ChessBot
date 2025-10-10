@@ -17,6 +17,7 @@ namespace ChessChallenge.Application
         private const int MaxInputLength = 200;
         private float scrollOffset = 0f;
         private bool inputBoxFocused = false;
+        private float inputTextOffset = 0f; // Horizontal scroll offset for input text
 
         // Backend integration
         private readonly GameStorageService? gameStorage;
@@ -377,15 +378,42 @@ namespace ChessChallenge.Application
             );
             Raylib.DrawRectangleRoundedLines(inputRect, 0.3f, 8, 2, borderColor);
 
-            // Input text or placeholder
+            // Calculate text scrolling for long input
             int fontSize = UIHelper.ScaleInt(24);
-            Vector2 textPos = new Vector2(inputX + UIHelper.Scale(12), inputY + scaledInputHeight / 2);
+            float leftPadding = UIHelper.Scale(12);
+            float rightPadding = UIHelper.Scale(12);
+            float availableWidth = inputWidth - leftPadding - rightPadding;
+
             string displayText = inputText.Length > 0 ? inputText.ToString() : "Type message...";
             Color textColor = inputText.Length > 0 ? Color.WHITE : new Color(120, 120, 120, 255);
+
+            // Measure full text width
+            Vector2 fullTextSize = Raylib.MeasureTextEx(UIHelper.GetFont(), displayText, fontSize, 1);
+
+            // Auto-scroll input text to keep cursor visible
+            if (inputText.Length > 0 && fullTextSize.X > availableWidth)
+            {
+                // Keep the end of the text visible (where cursor is)
+                inputTextOffset = -(fullTextSize.X - availableWidth);
+            }
+            else
+            {
+                inputTextOffset = 0f;
+            }
+
+            // Enable scissor mode for text clipping
+            Raylib.BeginScissorMode(
+                (int)(inputX + leftPadding),
+                (int)inputY,
+                (int)availableWidth,
+                (int)scaledInputHeight
+            );
+
+            Vector2 textPos = new Vector2(inputX + leftPadding + inputTextOffset, inputY + scaledInputHeight / 2);
             UIHelper.DrawText(displayText, textPos, fontSize, 1, textColor, UIHelper.AlignH.Left, UIHelper.AlignV.Centre);
 
             // Cursor blink when focused
-            if (inputBoxFocused && (DateTime.Now.Millisecond / 500) % 2 == 0)
+            if (inputBoxFocused && (DateTime.Now.Millisecond / 500) % 2 == 0 && inputText.Length > 0)
             {
                 Vector2 cursorTextSize = Raylib.MeasureTextEx(UIHelper.GetFont(), inputText.ToString(), fontSize, 1);
                 float cursorX = textPos.X + cursorTextSize.X;
@@ -395,6 +423,8 @@ namespace ChessChallenge.Application
                     2, Color.WHITE
                 );
             }
+
+            Raylib.EndScissorMode();
 
             // Send button
             DrawSendButton(sendButtonX, inputY, sendButtonWidth, scaledInputHeight);
