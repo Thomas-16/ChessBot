@@ -126,7 +126,7 @@ public class ChessHub : Hub
         }
     }
 
-    public async Task SendVoiceMessage(string gameId, string base64Audio)
+    public async Task SendVoiceMessage(string gameId, string base64Audio, ChessPositionContext? context = null)
     {
         try
         {
@@ -149,8 +149,8 @@ public class ChessHub : Hub
                 return;
             }
 
-            // Process as regular chat message
-            await SendChatMessage(gameId, transcribedText);
+            // Process as regular chat message with context
+            await SendChatMessage(gameId, transcribedText, context);
 
             _logger.LogInformation("Processed voice message for game {GameId}: {TranscribedText}", gameId, transcribedText);
         }
