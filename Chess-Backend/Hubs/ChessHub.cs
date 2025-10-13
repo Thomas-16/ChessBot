@@ -149,6 +149,13 @@ public class ChessHub : Hub
                 return;
             }
 
+            // Send transcription back to client first
+            await Clients.Caller.SendAsync("VoiceTranscription", new
+            {
+                gameId = gameId,
+                transcribedText = transcribedText
+            });
+
             // Process as regular chat message with context
             await SendChatMessage(gameId, transcribedText, context);
 

@@ -2,6 +2,7 @@ using Raylib_cs;
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using NAudio.Wave;
 using static ChessChallenge.Application.ConsoleHelper;
 
 namespace ChessChallenge.Application.Services
@@ -12,7 +13,17 @@ namespace ChessChallenge.Application.Services
         private bool isPlaying;
         private string? tempAudioFilePath;
 
+        // Recording state
+        private WaveInEvent? waveIn;
+        private MemoryStream? recordingStream;
+        private WaveFileWriter? waveWriter;
+        private bool isRecording;
+        private DateTime recordingStartTime;
+        private const int MaxRecordingSeconds = 30;
+
         public bool IsPlaying => isPlaying;
+        public bool IsRecording => isRecording;
+        public double RecordingDuration => isRecording ? (DateTime.UtcNow - recordingStartTime).TotalSeconds : 0;
 
         public async Task PlayBase64AudioAsync(string base64Audio)
         {
@@ -119,9 +130,155 @@ namespace ChessChallenge.Application.Services
             }
         }
 
+        public bool StartRecording()
+        {
+            if (isRecording)
+            {
+                Log("⚠️ Already recording", false, ConsoleColor.Yellow);
+                return false;
+            }
+
+            try
+            {
+                // Check if microphone is available
+                if (WaveInEvent.DeviceCount == 0)
+                {
+                    Log("❌ No microphone device found", false, ConsoleColor.Red);
+                    return false;
+                }
+
+                // Initialize recording
+                waveIn = new WaveInEvent
+                {
+                    WaveFormat = new WaveFormat(16000, 1) // 16kHz, mono (Whisper-optimized)
+                };
+
+                recordingStream = new MemoryStream();
+                waveWriter = new WaveFileWriter(recordingStream, waveIn.WaveFormat);
+
+                waveIn.DataAvailable += OnDataAvailable;
+                waveIn.RecordingStopped += OnRecordingStopped;
+
+                waveIn.StartRecording();
+                isRecording = true;
+                recordingStartTime = DateTime.UtcNow;
+
+                Log("🎤 Started recording", false, ConsoleColor.Green);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Failed to start recording: {ex.Message}", false, ConsoleColor.Red);
+                CleanupRecording();
+                return false;
+            }
+        }
+
+        public string? StopRecording()
+        {
+            if (!isRecording)
+            {
+                Log("⚠️ Not currently recording", false, ConsoleColor.Yellow);
+                return null;
+            }
+
+            try
+            {
+                waveIn?.StopRecording();
+                isRecording = false;
+
+                // Wait for recording to fully stop
+                System.Threading.Thread.Sleep(100);
+
+                // Finalize WAV file
+                waveWriter?.Flush();
+
+                // Get audio bytes
+                byte[] audioBytes = recordingStream?.ToArray() ?? Array.Empty<byte>();
+
+                if (audioBytes.Length == 0)
+                {
+                    Log("⚠️ Recording is empty", false, ConsoleColor.Yellow);
+                    CleanupRecording();
+                    return null;
+                }
+
+                // Convert to base64
+                string base64Audio = Convert.ToBase64String(audioBytes);
+
+                double duration = (DateTime.UtcNow - recordingStartTime).TotalSeconds;
+                Log($"🎤 Stopped recording ({duration:F1}s, {audioBytes.Length} bytes)", false, ConsoleColor.Green);
+
+                CleanupRecording();
+                return base64Audio;
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Failed to stop recording: {ex.Message}", false, ConsoleColor.Red);
+                CleanupRecording();
+                return null;
+            }
+        }
+
+        private void OnDataAvailable(object? sender, WaveInEventArgs e)
+        {
+            if (waveWriter != null && e.BytesRecorded > 0)
+            {
+                waveWriter.Write(e.Buffer, 0, e.BytesRecorded);
+
+                // Auto-stop if max duration reached
+                if (RecordingDuration >= MaxRecordingSeconds)
+                {
+                    Log($"⏱️ Max recording duration ({MaxRecordingSeconds}s) reached, stopping", false, ConsoleColor.Yellow);
+                    waveIn?.StopRecording();
+                }
+            }
+        }
+
+        private void OnRecordingStopped(object? sender, StoppedEventArgs e)
+        {
+            if (e.Exception != null)
+            {
+                Log($"❌ Recording stopped with error: {e.Exception.Message}", false, ConsoleColor.Red);
+            }
+        }
+
+        private void CleanupRecording()
+        {
+            try
+            {
+                if (waveWriter != null)
+                {
+                    waveWriter.Dispose();
+                    waveWriter = null;
+                }
+
+                if (recordingStream != null)
+                {
+                    recordingStream.Dispose();
+                    recordingStream = null;
+                }
+
+                if (waveIn != null)
+                {
+                    waveIn.DataAvailable -= OnDataAvailable;
+                    waveIn.RecordingStopped -= OnRecordingStopped;
+                    waveIn.Dispose();
+                    waveIn = null;
+                }
+
+                isRecording = false;
+            }
+            catch (Exception ex)
+            {
+                Log($"⚠️ Error cleaning up recording: {ex.Message}", false, ConsoleColor.Yellow);
+            }
+        }
+
         public void Dispose()
         {
             StopAudio();
+            CleanupRecording();
         }
     }
 }

@@ -42,6 +42,9 @@ namespace ChessChallenge.Application
         private float sendButtonHoverLerp = 0f;
         private float sendButtonPressLerp = 0f;
         private float scrollbarAlpha = 0f;
+        private float micButtonHoverLerp = 0f;
+        private float micButtonPressLerp = 0f;
+        private float micButtonPulseLerp = 0f;
 
         // Layout constants (reference 1920x1080)
         private readonly Vector2 panelPos = new(1420, 150);
@@ -63,6 +66,7 @@ namespace ChessChallenge.Application
             {
                 backendApi.RegisterChatResponseHandler(OnReceiveChatResponse);
                 backendApi.RegisterChatErrorHandler(OnChatError);
+                backendApi.RegisterVoiceTranscriptionHandler(OnVoiceTranscription);
             }
 
             // Add a welcome message from AI
@@ -100,6 +104,17 @@ namespace ChessChallenge.Application
             // Input box focus animation
             float targetFocus = inputBoxFocused ? 1f : 0f;
             inputBoxFocusLerp = Lerp(inputBoxFocusLerp, targetFocus, deltaTime * lerpSpeed);
+
+            // Microphone button pulse animation (when recording)
+            if (audioService?.IsRecording == true)
+            {
+                micButtonPulseLerp += deltaTime * 3f;
+                if (micButtonPulseLerp > 1f) micButtonPulseLerp = 0f;
+            }
+            else
+            {
+                micButtonPulseLerp = 0f;
+            }
 
             // Scrollbar fade animation
             Vector2 scaledPos = UIHelper.Scale(panelPos);
@@ -355,9 +370,11 @@ namespace ChessChallenge.Application
 
             float inputY = scaledPos.Y + scaledSize.Y - scaledInputHeight - scaledPadding;
             float inputX = scaledPos.X + scaledPadding;
-            float inputWidth = scaledSize.X - scaledPadding * 2 - UIHelper.Scale(70); // Leave space for send button
+            float micButtonWidth = UIHelper.Scale(60);
             float sendButtonWidth = UIHelper.Scale(60);
-            float sendButtonX = inputX + inputWidth + scaledPadding;
+            float inputWidth = scaledSize.X - scaledPadding * 3 - micButtonWidth - sendButtonWidth; // Leave space for mic and send buttons
+            float micButtonX = inputX + inputWidth + scaledPadding;
+            float sendButtonX = micButtonX + micButtonWidth + scaledPadding;
 
             // Input box background with smooth focus transition
             Rectangle inputRect = new Rectangle(inputX, inputY, inputWidth, scaledInputHeight);
@@ -426,8 +443,96 @@ namespace ChessChallenge.Application
 
             Raylib.EndScissorMode();
 
+            // Microphone button
+            DrawMicButton(micButtonX, inputY, micButtonWidth, scaledInputHeight);
+
             // Send button
             DrawSendButton(sendButtonX, inputY, sendButtonWidth, scaledInputHeight);
+        }
+
+        private void DrawMicButton(float x, float y, float width, float height)
+        {
+            Rectangle buttonRect = new Rectangle(x, y, width, height);
+            bool mouseOver = MouseInRect(buttonRect);
+            bool isRecording = audioService?.IsRecording == true;
+            bool canUse = pendingResponseMessage == null && audioService != null; // Disable if waiting for response or no audio service
+            bool isPressed = mouseOver && Raylib.IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT);
+
+            // Smooth hover/press animations
+            float deltaTime = Raylib.GetFrameTime();
+            float targetHover = (mouseOver && canUse) ? 1f : 0f;
+            float targetPress = isPressed ? 1f : 0f;
+            micButtonHoverLerp = Lerp(micButtonHoverLerp, targetHover, deltaTime * 12f);
+            micButtonPressLerp = Lerp(micButtonPressLerp, targetPress, deltaTime * 20f);
+
+            // Scale effect on press
+            float scaleEffect = 1f - micButtonPressLerp * 0.08f;
+            float scaledWidth = width * scaleEffect;
+            float scaledHeight = height * scaleEffect;
+            float offsetX = (width - scaledWidth) / 2f;
+            float offsetY = (height - scaledHeight) / 2f;
+
+            Rectangle scaledButtonRect = new Rectangle(x + offsetX, y + offsetY, scaledWidth, scaledHeight);
+
+            // Button color with smooth transitions
+            Color buttonColor;
+            if (!canUse)
+            {
+                buttonColor = new Color(60, 60, 60, 255);
+            }
+            else if (isRecording)
+            {
+                // Pulsing red when recording
+                float pulse = MathF.Sin(micButtonPulseLerp * MathF.PI * 2f) * 0.5f + 0.5f;
+                int r = (int)(180 + 75 * pulse);
+                int g = (int)(20 + 10 * pulse);
+                int b = (int)(20 + 10 * pulse);
+                buttonColor = new Color(r, g, b, 255);
+            }
+            else
+            {
+                int r = (int)(50 + 10 * micButtonHoverLerp - 10 * micButtonPressLerp);
+                int g = (int)(100 + 40 * micButtonHoverLerp - 20 * micButtonPressLerp);
+                int b = (int)(200 + 40 * micButtonHoverLerp - 20 * micButtonPressLerp);
+                buttonColor = new Color(r, g, b, 255);
+            }
+
+            Raylib.DrawRectangleRounded(scaledButtonRect, 0.3f, 8, buttonColor);
+
+            // Glow effect when hovering or recording
+            if ((canUse && micButtonHoverLerp > 0.1f) || isRecording)
+            {
+                float glowAlpha = isRecording ? 60f : 40f * micButtonHoverLerp;
+                Color glowColor = isRecording
+                    ? new Color(255, 100, 100, (int)glowAlpha)
+                    : new Color(100, 180, 255, (int)glowAlpha);
+                Rectangle glowRect = new Rectangle(x + offsetX - 2, y + offsetY - 2, scaledWidth + 4, scaledHeight + 4);
+                Raylib.DrawRectangleRounded(glowRect, 0.3f, 8, glowColor);
+                Raylib.DrawRectangleRounded(scaledButtonRect, 0.3f, 8, buttonColor);
+            }
+
+            // Mic icon
+            Vector2 center = new Vector2(x + width / 2, y + height / 2);
+            int fontSize = UIHelper.ScaleInt(28);
+            Color iconColor = canUse ? Color.WHITE : new Color(120, 120, 120, 255);
+            string iconText = isRecording ? "[]" : "M"; // Simple mic icon
+            UIHelper.DrawText(iconText, center, fontSize, 1, iconColor, UIHelper.AlignH.Centre, UIHelper.AlignV.Centre);
+
+            // Recording duration text
+            if (isRecording && audioService != null)
+            {
+                double duration = audioService.RecordingDuration;
+                string durationText = $"{duration:F1}s";
+                Vector2 durationPos = new Vector2(x + width / 2, y - UIHelper.Scale(15));
+                int durationFontSize = UIHelper.ScaleInt(16);
+                UIHelper.DrawText(durationText, durationPos, durationFontSize, 1, new Color(255, 100, 100, 255), UIHelper.AlignH.Centre, UIHelper.AlignV.Centre);
+            }
+
+            // Handle click
+            if (canUse && mouseOver && Raylib.IsMouseButtonPressed(MouseButton.MOUSE_BUTTON_LEFT))
+            {
+                HandleMicButtonClick();
+            }
         }
 
         private void DrawSendButton(float x, float y, float width, float height)
@@ -615,6 +720,94 @@ namespace ChessChallenge.Application
             }
         }
 
+        private void HandleMicButtonClick()
+        {
+            if (audioService == null) return;
+
+            if (audioService.IsRecording)
+            {
+                // Stop recording and send
+                SendVoiceMessage();
+            }
+            else
+            {
+                // Start recording
+                bool started = audioService.StartRecording();
+                if (!started)
+                {
+                    AddMessage("System", "Failed to start recording - check microphone permissions", false);
+                }
+            }
+        }
+
+        private async void SendVoiceMessage()
+        {
+            if (audioService == null) return;
+
+            // Stop recording and get audio
+            string? base64Audio = audioService.StopRecording();
+            if (string.IsNullOrEmpty(base64Audio))
+            {
+                AddMessage("System", "Recording failed or was empty", false);
+                return;
+            }
+
+            // Stop any ongoing typing effects and audio playback
+            foreach (var message in messages)
+            {
+                if (message.IsTyping)
+                {
+                    message.IsTyping = false;
+                    message.VisibleCharCount = message.Message.Length;
+                }
+            }
+            audioService.StopAudio();
+
+            // Add placeholder for transcription/response
+            ChatMessage placeholderMessage = new ChatMessage("AI", "...", false, isPlaceholder: true);
+            messages.Add(placeholderMessage);
+            ScrollToBottom();
+
+            // Start timeout tracking
+            pendingResponseMessage = placeholderMessage;
+            pendingResponseStartTime = (float)Raylib.GetTime();
+            lastRequestSentTime = DateTime.UtcNow;
+
+            // Send to backend
+            if (backendApi != null && gameStorage != null)
+            {
+                string? gameId = gameStorage.GetCurrentGameId();
+
+                if (string.IsNullOrEmpty(gameId))
+                {
+                    Log("⚠️ No active game session - cannot send voice message", false, ConsoleColor.Yellow);
+                    messages.Remove(placeholderMessage);
+                    pendingResponseMessage = null;
+                    AddMessage("System", "Cannot send voice - no active game session", false);
+                    return;
+                }
+
+                // Extract position context
+                ChessPositionContext? context = contextExtractor?.Invoke();
+
+                // Send voice message to backend
+                bool success = await backendApi.SendVoiceMessageAsync(gameId, base64Audio, context);
+
+                if (!success)
+                {
+                    messages.Remove(placeholderMessage);
+                    pendingResponseMessage = null;
+                    AddMessage("System", "Failed to send voice message - backend not connected", false);
+                }
+            }
+            else
+            {
+                Log("[Chat] Voice message recorded but backend not configured", false, ConsoleColor.Cyan);
+                messages.Remove(placeholderMessage);
+                pendingResponseMessage = null;
+            }
+        }
+
         private async void SendMessage()
         {
             string messageText = inputText.ToString().Trim();
@@ -741,6 +934,38 @@ namespace ChessChallenge.Application
                     messages.RemoveAt(placeholderIndex);
                 }
                 AddMessage("System", "Error receiving AI response", false);
+            }
+        }
+
+        private void OnVoiceTranscription(object response)
+        {
+            try
+            {
+                // Parse response JSON
+                JsonElement jsonElement = (JsonElement)response;
+                string transcribedText = jsonElement.GetProperty("transcribedText").GetString() ?? "";
+
+                Log($"🎤 Voice transcribed: {transcribedText}", false, ConsoleColor.Cyan);
+
+                // Replace placeholder with user's transcribed message
+                int placeholderIndex = messages.FindIndex(m => m.IsPlaceholder);
+                if (placeholderIndex >= 0)
+                {
+                    messages.RemoveAt(placeholderIndex);
+                }
+
+                // Add user message with transcribed text
+                AddMessage("User", transcribedText, true);
+
+                // Add new placeholder for AI response
+                ChatMessage aiPlaceholder = new ChatMessage("AI", "...", false, isPlaceholder: true);
+                messages.Add(aiPlaceholder);
+                pendingResponseMessage = aiPlaceholder;
+                ScrollToBottom();
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Error processing voice transcription: {ex.Message}", false, ConsoleColor.Red);
             }
         }
 

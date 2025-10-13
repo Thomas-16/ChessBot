@@ -42,7 +42,11 @@ namespace ChessChallenge.Application.Services
                 Log($"🔌 Connecting to SignalR hub: {hubUrl}", false, ConsoleColor.Cyan);
 
                 _connection = new HubConnectionBuilder()
-                    .WithUrl(hubUrl)
+                    .WithUrl(hubUrl, options =>
+                    {
+                        // Increase max message size to 10MB for voice messages
+                        options.TransportMaxBufferSize = 10 * 1024 * 1024; // 10MB
+                    })
                     .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30) })
                     .Build();
 
@@ -63,6 +67,10 @@ namespace ChessChallenge.Application.Services
                 if (_chatErrorHandler != null)
                 {
                     _connection.On<string>("ChatError", _chatErrorHandler);
+                }
+                if (_voiceTranscriptionHandler != null)
+                {
+                    _connection.On<object>("VoiceTranscription", _voiceTranscriptionHandler);
                 }
 
                 await _connection.StartAsync();
@@ -146,8 +154,30 @@ namespace ChessChallenge.Application.Services
             }
         }
 
+        public async Task<bool> SendVoiceMessageAsync(string gameId, string base64Audio, ChessPositionContext? context = null)
+        {
+            if (!_isConnected || _connection == null)
+            {
+                Log("⚠️ Cannot send voice message - SignalR not connected", false, ConsoleColor.Yellow);
+                return false;
+            }
+
+            try
+            {
+                Log($"🎤 Sending voice message via SignalR: {gameId}", false, ConsoleColor.Cyan);
+                await _connection.InvokeAsync("SendVoiceMessage", gameId, base64Audio, context);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Failed to send voice message: {ex.Message}", false, ConsoleColor.Red);
+                return false;
+            }
+        }
+
         private Action<object>? _chatResponseHandler;
         private Action<string>? _chatErrorHandler;
+        private Action<object>? _voiceTranscriptionHandler;
 
         public void RegisterChatResponseHandler(Action<object> handler)
         {
@@ -164,6 +194,15 @@ namespace ChessChallenge.Application.Services
             if (_connection != null)
             {
                 _connection.On<string>("ChatError", handler);
+            }
+        }
+
+        public void RegisterVoiceTranscriptionHandler(Action<object> handler)
+        {
+            _voiceTranscriptionHandler = handler;
+            if (_connection != null)
+            {
+                _connection.On<object>("VoiceTranscription", handler);
             }
         }
 

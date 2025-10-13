@@ -76,6 +76,16 @@ namespace ChessChallenge.Application.Services
             return await _signalRService.SendChatMessageAsync(gameId, message, context);
         }
 
+        public async Task<bool> SendVoiceMessageAsync(string gameId, string base64Audio, ChessPositionContext? context = null)
+        {
+            if (!_config.EnableBackendIntegration || !IsConnected || string.IsNullOrEmpty(gameId))
+            {
+                return false;
+            }
+
+            return await _signalRService.SendVoiceMessageAsync(gameId, base64Audio, context);
+        }
+
         public void RegisterChatResponseHandler(Action<object> handler)
         {
             _signalRService.RegisterChatResponseHandler(handler);
@@ -84,6 +94,11 @@ namespace ChessChallenge.Application.Services
         public void RegisterChatErrorHandler(Action<string> handler)
         {
             _signalRService.RegisterChatErrorHandler(handler);
+        }
+
+        public void RegisterVoiceTranscriptionHandler(Action<object> handler)
+        {
+            _signalRService.RegisterVoiceTranscriptionHandler(handler);
         }
     }
 }
