@@ -11,7 +11,11 @@ builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
 // Add services to the container
 builder.Services.AddControllers();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    // Increase max message size to 10MB for voice messages (WAV audio can be large)
+    options.MaximumReceiveMessageSize = 10 * 1024 * 1024; // 10MB
+});
 
 // Configure CORS for all origins (adjust for production)
 builder.Services.AddCors(options =>
