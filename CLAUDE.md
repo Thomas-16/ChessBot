@@ -63,7 +63,8 @@ docker run -p 5000:5000 chess-backend
    - `SignalRService.cs`: Real-time WebSocket connection to backend
    - `BackendApiService.cs`: Wrapper for backend API calls
    - `GameStorageService.cs`: Game session and chat persistence
-   - `AudioService.cs`: TTS audio playback (plays MP3 from base64)
+   - `AudioService.cs`: Microphone recording (NAudio) + TTS audio playback (plays MP3 from base64)
+   - `GroqWhisperService.cs`: Speech-to-text via Groq Whisper API (~200-500ms)
 
 4. **Core** (`src/Framework/Application/Core/`)
    - `ChallengeController.cs`: Main game controller, orchestrates UI/services
@@ -93,8 +94,8 @@ docker run -p 5000:5000 chess-backend
 
 2. **Services:**
    - `GroqService.cs`: Groq API integration (primary, fastest)
-   - `OpenAIService.cs`: OpenAI integration
-   - `VoiceService.cs`: ElevenLabs TTS + OpenAI Whisper STT
+   - `OpenAIService.cs`: OpenAI integration (fallback)
+   - `VoiceService.cs`: ElevenLabs TTS only (STT moved to frontend)
    - Both AI services use shared prompt from `Config/AIPrompts.cs`
 
 3. **Database Models** (`Models/`)
@@ -128,7 +129,7 @@ docker run -p 5000:5000 chess-backend
   - `ChatError` → error string
   - `GameSaved` → gameId confirmation
 
-**Chat Flow with Timing:**
+**Text Chat Flow:**
 1. User types message → `ChatUI.SendMessage()`
 2. Display "..." placeholder immediately
 3. Send to backend via SignalR (~50ms network)
@@ -143,9 +144,26 @@ docker run -p 5000:5000 chess-backend
 8. Start typing effect (30ms per character)
 9. Play audio simultaneously (from base64 → temp file → Raylib music stream, no looping)
 
+**Voice Chat Flow (Frontend STT):**
+1. User clicks mic button → `AudioService.StartRecording()`
+2. User speaks (NAudio records WAV at 16kHz mono)
+3. User clicks mic again → `AudioService.StopRecording()` returns temp WAV path
+4. Display "Transcribing..." indicator
+5. Frontend calls Groq Whisper API directly (~200-500ms)
+6. Display transcribed text as user message
+7. Send transcribed text as normal chat message (same flow as text chat above)
+8. Frontend receives AI response with TTS audio
+
 **Configuration:**
-- Frontend: `Chess-Challenge/appsettings.json` (backend URL, SignalR settings)
-- Backend: Environment variables on Render
+- **Frontend** (`Chess-Challenge/appsettings.json`):
+  - `Backend:ApiBaseUrl`: Backend URL for SignalR
+  - `Groq:ApiKey`: Groq API key for Whisper STT (frontend-side transcription)
+  - `Groq:WhisperModel`: "whisper-large-v3" (best quality, ~200-500ms)
+- **Backend** (Environment variables on Render):
+  - `GROQ_API_KEY`: For LLM chat responses
+  - `OPENAI_API_KEY`: Fallback for chat
+  - `ELEVENLABS_API_KEY`: TTS audio generation
+  - `DATABASE_URL`: PostgreSQL connection
 
 ## Important Implementation Details
 
@@ -171,6 +189,14 @@ docker run -p 5000:5000 chess-backend
 - Tracked via `pendingResponseMessage` and `pendingResponseStartTime`
 - Timeout shows "Error responding right now" in chat
 
+**Voice Input System:**
+- Mic button disabled until Groq Whisper service is initialized
+- `AudioService` records at 16kHz mono (optimized for Whisper)
+- Saves recording to temp WAV file, deleted after transcription
+- `GroqWhisperService` directly calls Groq API from frontend
+- Transcribed text sent as regular chat message (unified flow)
+- Max recording duration: 30 seconds (auto-stop)
+
 **AI Prompt Consistency:**
 - Both Groq and OpenAI use `AIPrompts.ChessOpponentSystemPrompt`
 - Located in `Chess-Backend/Config/AIPrompts.cs`
@@ -186,18 +212,30 @@ docker run -p 5000:5000 chess-backend
 
 **Frontend:**
 - Standalone .NET 6 executable
-- Update `appsettings.json` ApiBaseUrl to point to Render backend
+- Update `appsettings.json`:
+  - `Backend:ApiBaseUrl`: Point to Render backend
+  - `Groq:ApiKey`: Add Groq API key for voice input (get from https://console.groq.com)
 - Run locally: `dotnet run` from Chess-Challenge directory
+- Voice input requires Groq API key (free tier available)
 
 ## Performance Optimization
 
-**Current Bottlenecks (in order):**
-1. ElevenLabs TTS: ~1800ms (unavoidable, external API)
-2. Groq API: ~300-600ms (fast, already optimized)
-3. Database: ~85ms (PostgreSQL on Render free tier)
+**Current Performance (Optimized):**
+- **Voice transcription**: ~200-500ms (Groq Whisper API on frontend)
+- **Chat LLM response**: ~300-600ms (Groq llama-3.1-70b)
+- **TTS generation**: ~1800ms (ElevenLabs)
+- **Total voice-to-response**: ~2.5-3s (fast!)
 
-**If response time needs improvement:**
-- Groq is already 3-4x faster than OpenAI
+**Architecture Decisions:**
+- **Frontend STT**: Voice transcription moved to frontend for 2-3s improvement
+  - No backend upload/processing overhead
+  - Groq Whisper API directly from client
+  - Falls back to backend if Groq key not configured
+- **Unified chat flow**: Voice transcribed text sent as regular message
+  - Simplifies backend (no separate voice message handlers)
+  - Same AI response flow for text and voice input
+
+**Further Optimization Ideas:**
 - Consider streaming: send text response immediately, stream audio separately
 - Make TTS optional (toggle voice on/off)
 - Cache frequent responses
