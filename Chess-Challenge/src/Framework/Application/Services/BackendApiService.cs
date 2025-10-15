@@ -75,16 +75,7 @@ namespace ChessChallenge.Application.Services
 
             return await _signalRService.SendChatMessageAsync(gameId, message, context);
         }
-
-        public async Task<bool> SendVoiceMessageAsync(string gameId, string base64Audio, ChessPositionContext? context = null)
-        {
-            if (!_config.EnableBackendIntegration || !IsConnected || string.IsNullOrEmpty(gameId))
-            {
-                return false;
-            }
-
-            return await _signalRService.SendVoiceMessageAsync(gameId, base64Audio, context);
-        }
+        
 
         public void RegisterChatResponseHandler(Action<object> handler)
         {

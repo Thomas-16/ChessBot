@@ -79,26 +79,4 @@ public class VoiceService
             return Array.Empty<byte>();
         }
     }
-
-    public async Task<string> SpeechToTextAsync(byte[] audioData)
-    {
-        try
-        {
-            // Create a temporary stream from the audio data
-            using MemoryStream audioStream = new MemoryStream(audioData);
-
-            // Use OpenAI Whisper for speech-to-text
-            ClientResult<AudioTranscription>? transcription = await _audioClient.TranscribeAudioAsync(audioStream, "audio.wav");
-            string? text = transcription.Value.Text;
-
-            _logger.LogInformation("Transcribed audio ({AudioSize} bytes) to text: {Text}",
-                audioData.Length, text);
-            return text;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error transcribing audio ({AudioSize} bytes)", audioData.Length);
-            return "Sorry, I couldn't understand the audio.";
-        }
-    }
 }

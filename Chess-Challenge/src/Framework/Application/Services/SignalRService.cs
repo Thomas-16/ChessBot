@@ -154,27 +154,6 @@ namespace ChessChallenge.Application.Services
             }
         }
 
-        public async Task<bool> SendVoiceMessageAsync(string gameId, string base64Audio, ChessPositionContext? context = null)
-        {
-            if (!_isConnected || _connection == null)
-            {
-                Log("⚠️ Cannot send voice message - SignalR not connected", false, ConsoleColor.Yellow);
-                return false;
-            }
-
-            try
-            {
-                Log($"🎤 Sending voice message via SignalR: {gameId}", false, ConsoleColor.Cyan);
-                await _connection.InvokeAsync("SendVoiceMessage", gameId, base64Audio, context);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Log($"❌ Failed to send voice message: {ex.Message}", false, ConsoleColor.Red);
-                return false;
-            }
-        }
-
         private Action<object>? _chatResponseHandler;
         private Action<string>? _chatErrorHandler;
         private Action<object>? _voiceTranscriptionHandler;

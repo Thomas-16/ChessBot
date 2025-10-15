@@ -126,48 +126,6 @@ public class ChessHub : Hub
         }
     }
 
-    public async Task SendVoiceMessage(string gameId, string base64Audio, ChessPositionContext? context = null)
-    {
-        try
-        {
-            // Validate game exists
-            bool gameExists = await _context.Games.AnyAsync(g => g.Id == gameId);
-            if (!gameExists)
-            {
-                throw new HubException("Game not found");
-            }
-
-            // Convert base64 to bytes
-            byte[] audioBytes = Convert.FromBase64String(base64Audio);
-
-            // Convert speech to text
-            string transcribedText = await _voiceService.SpeechToTextAsync(audioBytes);
-
-            if (string.IsNullOrWhiteSpace(transcribedText))
-            {
-                await Clients.Caller.SendAsync("ChatError", "Could not understand the audio");
-                return;
-            }
-
-            // Send transcription back to client first
-            await Clients.Caller.SendAsync("VoiceTranscription", new
-            {
-                gameId = gameId,
-                transcribedText = transcribedText
-            });
-
-            // Process as regular chat message with context
-            await SendChatMessage(gameId, transcribedText, context);
-
-            _logger.LogInformation("Processed voice message for game {GameId}: {TranscribedText}", gameId, transcribedText);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error processing voice message for game {GameId}", gameId);
-            await Clients.Caller.SendAsync("ChatError", "Failed to process voice message");
-        }
-    }
-
     public async Task SaveGameResult(string gameId, string pgn, string result)
     {
         try

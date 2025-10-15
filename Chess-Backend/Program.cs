@@ -13,7 +13,6 @@ builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 builder.Services.AddControllers();
 builder.Services.AddSignalR(options =>
 {
-    // Increase max message size to 10MB for voice messages (WAV audio can be large)
     options.MaximumReceiveMessageSize = 10 * 1024 * 1024; // 10MB
 });
 
