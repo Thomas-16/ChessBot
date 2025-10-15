@@ -20,10 +20,12 @@ namespace ChessChallenge.Application.Services
         private bool isRecording;
         private DateTime recordingStartTime;
         private const int MaxRecordingSeconds = 30;
+        private float currentVolume = 0f; // 0.0 to 1.0
 
         public bool IsPlaying => isPlaying;
         public bool IsRecording => isRecording;
         public double RecordingDuration => isRecording ? (DateTime.UtcNow - recordingStartTime).TotalSeconds : 0;
+        public float CurrentVolume => currentVolume;
 
         public async Task PlayBase64AudioAsync(string base64Audio)
         {
@@ -226,6 +228,26 @@ namespace ChessChallenge.Application.Services
             {
                 waveWriter.Write(e.Buffer, 0, e.BytesRecorded);
 
+                // Calculate volume level (peak amplitude) for visualization
+                float peak = 0f;
+                // Assuming 16-bit PCM audio (2 bytes per sample)
+                for (int i = 0; i < e.BytesRecorded; i += 2)
+                {
+                    if (i + 1 < e.BytesRecorded)
+                    {
+                        short sample = (short)((e.Buffer[i + 1] << 8) | e.Buffer[i]);
+                        float sampleValue = sample / 32768f; // Normalize to -1.0 to 1.0
+                        float absSample = Math.Abs(sampleValue);
+                        if (absSample > peak)
+                        {
+                            peak = absSample;
+                        }
+                    }
+                }
+
+                // Smooth the volume with exponential moving average
+                currentVolume = currentVolume * 0.7f + peak * 0.3f;
+
                 // Auto-stop if max duration reached
                 if (RecordingDuration >= MaxRecordingSeconds)
                 {
@@ -268,6 +290,7 @@ namespace ChessChallenge.Application.Services
                 }
 
                 isRecording = false;
+                currentVolume = 0f; // Reset volume indicator
             }
             catch (Exception ex)
             {

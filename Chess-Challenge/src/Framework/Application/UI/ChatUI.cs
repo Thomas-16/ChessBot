@@ -54,12 +54,20 @@ namespace ChessChallenge.Application
         private readonly float messagePadding = 10f;
         private readonly float bubblePadding = 12f;
 
+        // Button icons
+        private Texture2D micIcon;
+        private Texture2D sendIcon;
+
         public ChatUI(GameStorageService? gameStorage = null, BackendApiService? backendApi = null, AudioService? audioService = null, Func<ChessPositionContext?>? contextExtractor = null)
         {
             this.gameStorage = gameStorage;
             this.backendApi = backendApi;
             this.audioService = audioService;
             this.contextExtractor = contextExtractor;
+
+            // Load button icons
+            micIcon = Raylib.LoadTexture("resources/Icons/mic.png");
+            sendIcon = Raylib.LoadTexture("resources/Icons/send.png");
 
             // Register backend handlers if available
             if (backendApi != null)
@@ -372,7 +380,7 @@ namespace ChessChallenge.Application
             float inputX = scaledPos.X + scaledPadding;
             float micButtonWidth = UIHelper.Scale(60);
             float sendButtonWidth = UIHelper.Scale(60);
-            float inputWidth = scaledSize.X - scaledPadding * 3 - micButtonWidth - sendButtonWidth; // Leave space for mic and send buttons
+            float inputWidth = scaledSize.X - scaledPadding * 4 - micButtonWidth - sendButtonWidth; // Leave space for mic and send buttons + right padding
             float micButtonX = inputX + inputWidth + scaledPadding;
             float sendButtonX = micButtonX + micButtonWidth + scaledPadding;
 
@@ -511,12 +519,43 @@ namespace ChessChallenge.Application
                 Raylib.DrawRectangleRounded(scaledButtonRect, 0.3f, 8, buttonColor);
             }
 
+            // Volume indicator (red fill behind mic when recording)
+            if (isRecording && audioService != null)
+            {
+                float volume = audioService.CurrentVolume; // 0.0 to 1.0
+                float iconSize = Math.Min(scaledWidth, scaledHeight) * 0.5f;
+                float indicatorHeight = iconSize * volume; // Volume-based height
+
+                // Draw red fill from bottom up
+                float indicatorY = y + offsetY + (scaledHeight - indicatorHeight) / 2f + (iconSize - indicatorHeight);
+                Rectangle volumeRect = new Rectangle(
+                    x + offsetX + (scaledWidth - iconSize) / 2f,
+                    indicatorY,
+                    iconSize,
+                    indicatorHeight
+                );
+
+                // Pulsing red color based on volume
+                int redIntensity = (int)(200 + 55 * volume);
+                Color volumeColor = new Color(redIntensity, 20, 20, 180);
+                Raylib.DrawRectangleRec(volumeRect, volumeColor);
+            }
+
             // Mic icon
-            Vector2 center = new Vector2(x + width / 2, y + height / 2);
-            int fontSize = UIHelper.ScaleInt(28);
-            Color iconColor = canUse ? Color.WHITE : new Color(120, 120, 120, 255);
-            string iconText = isRecording ? "[]" : "M"; // Simple mic icon
-            UIHelper.DrawText(iconText, center, fontSize, 1, iconColor, UIHelper.AlignH.Centre, UIHelper.AlignV.Centre);
+            Vector2 center = new Vector2(x + offsetX + scaledWidth / 2, y + offsetY + scaledHeight / 2);
+            float micIconSize = Math.Min(scaledWidth, scaledHeight) * 0.5f;
+
+            Color iconTint = canUse ? Color.WHITE : new Color(120, 120, 120, 255);
+
+            // Draw mic icon texture
+            Rectangle sourceRect = new Rectangle(0, 0, micIcon.width, micIcon.height);
+            Rectangle destRect = new Rectangle(
+                center.X - micIconSize / 2,
+                center.Y - micIconSize / 2,
+                micIconSize,
+                micIconSize
+            );
+            Raylib.DrawTexturePro(micIcon, sourceRect, destRect, new Vector2(0, 0), 0f, iconTint);
 
             // Recording duration text
             if (isRecording && audioService != null)
@@ -583,11 +622,21 @@ namespace ChessChallenge.Application
                 Raylib.DrawRectangleRounded(scaledButtonRect, 0.3f, 8, buttonColor);
             }
 
-            // Send icon (triangle/arrow)
-            Vector2 center = new Vector2(x + width / 2, y + height / 2);
-            int fontSize = UIHelper.ScaleInt(28);
-            Color iconColor = canSend ? Color.WHITE : new Color(120, 120, 120, 255);
-            UIHelper.DrawText(">", center, fontSize, 1, iconColor, UIHelper.AlignH.Centre, UIHelper.AlignV.Centre);
+            // Send icon
+            Vector2 center = new Vector2(x + offsetX + scaledWidth / 2, y + offsetY + scaledHeight / 2);
+            float iconSize = Math.Min(scaledWidth, scaledHeight) * 0.5f;
+
+            Color iconTint = canSend ? Color.WHITE : new Color(120, 120, 120, 255);
+
+            // Draw send icon texture
+            Rectangle sourceRect = new Rectangle(0, 0, sendIcon.width, sendIcon.height);
+            Rectangle destRect = new Rectangle(
+                center.X - iconSize / 2,
+                center.Y - iconSize / 2,
+                iconSize,
+                iconSize
+            );
+            Raylib.DrawTexturePro(sendIcon, sourceRect, destRect, new Vector2(0, 0), 0f, iconTint);
 
             // Handle click
             if (canSend && mouseOver && Raylib.IsMouseButtonPressed(MouseButton.MOUSE_BUTTON_LEFT))
