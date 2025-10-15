@@ -465,11 +465,10 @@ namespace ChessChallenge.Application
             bool mouseOver = MouseInRect(buttonRect);
             bool isRecording = audioService?.IsRecording == true;
 
-            // Check if Whisper is ready
-            WhisperService? whisperService = Program.ServiceProvider?.GetService<WhisperService>();
-            bool whisperReady = whisperService?.IsInitialized == true;
-
-            bool canUse = pendingResponseMessage == null && audioService != null && whisperReady; // Disable if waiting for response, no audio service, or Whisper not ready
+            // Check if transcription service is ready 
+            GroqWhisperService? groqWhisper = Program.ServiceProvider?.GetService<GroqWhisperService>();
+            
+            bool canUse = pendingResponseMessage == null && audioService != null && groqWhisper?.IsInitialized == true; // Disable if waiting for response, no audio service, or no transcription available
             bool isPressed = mouseOver && Raylib.IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT);
 
             // Smooth hover/press animations
@@ -820,27 +819,20 @@ namespace ChessChallenge.Application
 
             try
             {
-                // Get WhisperService from DI container
-                WhisperService? whisperService = Program.ServiceProvider?.GetService<WhisperService>();
-
-                if (whisperService == null || !whisperService.IsInitialized)
-                {
-                    AddMessage("System", "Voice transcription not available - Whisper model not loaded", false);
-                    // Clean up temp file
-                    if (File.Exists(audioFilePath))
-                    {
-                        File.Delete(audioFilePath);
-                    }
-                    return;
-                }
-
                 // Show transcribing indicator
                 ChatMessage transcribingMessage = new ChatMessage("System", "Transcribing...", false, isPlaceholder: true);
                 messages.Add(transcribingMessage);
                 ScrollToBottom();
 
-                // Transcribe audio locally
-                string? transcribedText = await whisperService.TranscribeAsync(audioFilePath);
+                string? transcribedText = null;
+
+                // Use Groq whisper
+                GroqWhisperService? groqWhisper = Program.ServiceProvider?.GetService<GroqWhisperService>();
+                if (groqWhisper?.IsInitialized == true)
+                {
+                    Log("🚀 Using Groq Whisper API for transcription", false, ConsoleColor.Cyan);
+                    transcribedText = await groqWhisper.TranscribeAsync(audioFilePath);
+                }
 
                 // Remove transcribing indicator
                 messages.Remove(transcribingMessage);

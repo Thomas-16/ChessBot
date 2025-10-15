@@ -51,6 +51,10 @@ namespace ChessChallenge.Application
                 // Load backend configuration
                 BackendConfig backendConfig = BackendConfig.LoadFromConfiguration(configuration);
 
+                // Load Groq configuration
+                string groqApiKey = configuration["Groq:ApiKey"] ?? "";
+                string groqWhisperModel = configuration["Groq:WhisperModel"] ?? "whisper-large-v3";
+
                 // Setup dependency injection
                 ServiceCollection services = new ServiceCollection();
                 services.AddSingleton(backendConfig);
@@ -58,7 +62,7 @@ namespace ChessChallenge.Application
                 services.AddHttpClient<BackendApiService>();
                 services.AddSingleton<GameStorageService>();
                 services.AddSingleton<AudioService>();
-                services.AddSingleton<WhisperService>();
+                services.AddSingleton(new GroqWhisperService(groqApiKey, groqWhisperModel));
 
                 ServiceProvider = services.BuildServiceProvider();
                 GameStorage = ServiceProvider.GetRequiredService<GameStorageService>();
@@ -101,28 +105,6 @@ namespace ChessChallenge.Application
             UpdateCamera(screenWidth, screenHeight);
 
             ChallengeController controller = new();
-
-            // Initialize Whisper model asynchronously
-            WhisperService? whisperService = ServiceProvider?.GetService<WhisperService>();
-            if (whisperService != null)
-            {
-                ConsoleHelper.Log("🚀 Starting Whisper initialization...", false, ConsoleColor.Cyan);
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        bool initialized = await whisperService.InitializeAsync();
-                        if (!initialized)
-                        {
-                            ConsoleHelper.Log("⚠️ Whisper initialization failed - voice input will be disabled", false, ConsoleColor.Yellow);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        ConsoleHelper.Log($"❌ Whisper initialization error: {ex.Message}", false, ConsoleColor.Red);
-                    }
-                });
-            }
 
             // Initialize backend connection asynchronously
             if (GameStorage != null)

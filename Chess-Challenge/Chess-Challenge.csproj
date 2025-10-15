@@ -22,8 +22,6 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="6.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="6.0.25" />
     <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="Whisper.net" Version="1.7.3" />
-    <PackageReference Include="Whisper.net.Runtime" Version="1.7.3" />
   </ItemGroup>
 
   <ItemGroup>
