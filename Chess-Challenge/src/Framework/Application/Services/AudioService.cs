@@ -205,14 +205,15 @@ namespace ChessChallenge.Application.Services
                     return null;
                 }
 
-                // Convert to base64
-                string base64Audio = Convert.ToBase64String(audioBytes);
+                // Save to temp WAV file for Whisper processing
+                string tempWavPath = Path.Combine(Path.GetTempPath(), $"recording_{Guid.NewGuid()}.wav");
+                File.WriteAllBytes(tempWavPath, audioBytes);
 
                 double duration = (DateTime.UtcNow - recordingStartTime).TotalSeconds;
-                Log($"🎤 Stopped recording ({duration:F1}s, {audioBytes.Length} bytes)", false, ConsoleColor.Green);
+                Log($"🎤 Stopped recording ({duration:F1}s, {audioBytes.Length} bytes) -> {tempWavPath}", false, ConsoleColor.Green);
 
                 CleanupRecording();
-                return base64Audio;
+                return tempWavPath;
             }
             catch (Exception ex)
             {

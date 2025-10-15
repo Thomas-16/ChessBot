@@ -1,9 +1,11 @@
 using Raylib_cs;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Numerics;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using ChessChallenge.Application.Models;
 using ChessChallenge.Application.Services;
 using static ChessChallenge.Application.ConsoleHelper;
@@ -74,7 +76,6 @@ namespace ChessChallenge.Application
             {
                 backendApi.RegisterChatResponseHandler(OnReceiveChatResponse);
                 backendApi.RegisterChatErrorHandler(OnChatError);
-                backendApi.RegisterVoiceTranscriptionHandler(OnVoiceTranscription);
             }
 
             // Add a welcome message from AI
@@ -463,7 +464,12 @@ namespace ChessChallenge.Application
             Rectangle buttonRect = new Rectangle(x, y, width, height);
             bool mouseOver = MouseInRect(buttonRect);
             bool isRecording = audioService?.IsRecording == true;
-            bool canUse = pendingResponseMessage == null && audioService != null; // Disable if waiting for response or no audio service
+
+            // Check if Whisper is ready
+            WhisperService? whisperService = Program.ServiceProvider?.GetService<WhisperService>();
+            bool whisperReady = whisperService?.IsInitialized == true;
+
+            bool canUse = pendingResponseMessage == null && audioService != null && whisperReady; // Disable if waiting for response, no audio service, or Whisper not ready
             bool isPressed = mouseOver && Raylib.IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT);
 
             // Smooth hover/press animations
@@ -793,9 +799,9 @@ namespace ChessChallenge.Application
         {
             if (audioService == null) return;
 
-            // Stop recording and get audio
-            string? base64Audio = audioService.StopRecording();
-            if (string.IsNullOrEmpty(base64Audio))
+            // Stop recording and get WAV file path
+            string? audioFilePath = audioService.StopRecording();
+            if (string.IsNullOrEmpty(audioFilePath))
             {
                 AddMessage("System", "Recording failed or was empty", false);
                 return;
@@ -812,48 +818,103 @@ namespace ChessChallenge.Application
             }
             audioService.StopAudio();
 
-            // Add placeholder for transcription/response
-            ChatMessage placeholderMessage = new ChatMessage("AI", "...", false, isPlaceholder: true);
-            messages.Add(placeholderMessage);
-            ScrollToBottom();
-
-            // Start timeout tracking
-            pendingResponseMessage = placeholderMessage;
-            pendingResponseStartTime = (float)Raylib.GetTime();
-            lastRequestSentTime = DateTime.UtcNow;
-
-            // Send to backend
-            if (backendApi != null && gameStorage != null)
+            try
             {
-                string? gameId = gameStorage.GetCurrentGameId();
+                // Get WhisperService from DI container
+                WhisperService? whisperService = Program.ServiceProvider?.GetService<WhisperService>();
 
-                if (string.IsNullOrEmpty(gameId))
+                if (whisperService == null || !whisperService.IsInitialized)
                 {
-                    Log("⚠️ No active game session - cannot send voice message", false, ConsoleColor.Yellow);
-                    messages.Remove(placeholderMessage);
-                    pendingResponseMessage = null;
-                    AddMessage("System", "Cannot send voice - no active game session", false);
+                    AddMessage("System", "Voice transcription not available - Whisper model not loaded", false);
+                    // Clean up temp file
+                    if (File.Exists(audioFilePath))
+                    {
+                        File.Delete(audioFilePath);
+                    }
                     return;
                 }
 
-                // Extract position context
-                ChessPositionContext? context = contextExtractor?.Invoke();
+                // Show transcribing indicator
+                ChatMessage transcribingMessage = new ChatMessage("System", "Transcribing...", false, isPlaceholder: true);
+                messages.Add(transcribingMessage);
+                ScrollToBottom();
 
-                // Send voice message to backend
-                bool success = await backendApi.SendVoiceMessageAsync(gameId, base64Audio, context);
+                // Transcribe audio locally
+                string? transcribedText = await whisperService.TranscribeAsync(audioFilePath);
 
-                if (!success)
+                // Remove transcribing indicator
+                messages.Remove(transcribingMessage);
+
+                // Clean up temp WAV file
+                if (File.Exists(audioFilePath))
                 {
-                    messages.Remove(placeholderMessage);
-                    pendingResponseMessage = null;
-                    AddMessage("System", "Failed to send voice message - backend not connected", false);
+                    File.Delete(audioFilePath);
+                }
+
+                if (string.IsNullOrEmpty(transcribedText))
+                {
+                    AddMessage("System", "Could not transcribe audio", false);
+                    return;
+                }
+
+                // Add user message with transcribed text
+                AddMessage("User", transcribedText, true);
+
+                // Send transcribed text as normal chat message
+                if (backendApi != null && gameStorage != null)
+                {
+                    string? gameId = gameStorage.GetCurrentGameId();
+
+                    if (string.IsNullOrEmpty(gameId))
+                    {
+                        Log("⚠️ No active game session - cannot send chat message", false, ConsoleColor.Yellow);
+                        AddMessage("System", "Cannot chat - no active game session", false);
+                        return;
+                    }
+
+                    // Add placeholder "..." message for AI
+                    ChatMessage placeholderMessage = new ChatMessage("AI", "...", false, isPlaceholder: true);
+                    messages.Add(placeholderMessage);
+                    ScrollToBottom();
+
+                    // Start timeout tracking and timing
+                    pendingResponseMessage = placeholderMessage;
+                    pendingResponseStartTime = (float)Raylib.GetTime();
+                    lastRequestSentTime = DateTime.UtcNow;
+
+                    // Extract position context
+                    ChessPositionContext? context = contextExtractor?.Invoke();
+
+                    // Send message to backend
+                    bool success = await backendApi.SendChatMessageAsync(gameId, transcribedText, context);
+
+                    if (!success)
+                    {
+                        // Remove placeholder on failure
+                        messages.Remove(placeholderMessage);
+                        pendingResponseMessage = null;
+                        AddMessage("System", "Failed to send message - backend not connected", false);
+                    }
+                }
+                else
+                {
+                    Log($"[Chat] Voice transcribed: {transcribedText} (backend not configured)", false, ConsoleColor.Cyan);
                 }
             }
-            else
+            catch (Exception ex)
             {
-                Log("[Chat] Voice message recorded but backend not configured", false, ConsoleColor.Cyan);
-                messages.Remove(placeholderMessage);
-                pendingResponseMessage = null;
+                Log($"❌ Error during voice transcription: {ex.Message}", false, ConsoleColor.Red);
+                AddMessage("System", "Error transcribing voice message", false);
+
+                // Clean up temp file on error
+                if (File.Exists(audioFilePath))
+                {
+                    try
+                    {
+                        File.Delete(audioFilePath);
+                    }
+                    catch { }
+                }
             }
         }
 
@@ -983,38 +1044,6 @@ namespace ChessChallenge.Application
                     messages.RemoveAt(placeholderIndex);
                 }
                 AddMessage("System", "Error receiving AI response", false);
-            }
-        }
-
-        private void OnVoiceTranscription(object response)
-        {
-            try
-            {
-                // Parse response JSON
-                JsonElement jsonElement = (JsonElement)response;
-                string transcribedText = jsonElement.GetProperty("transcribedText").GetString() ?? "";
-
-                Log($"🎤 Voice transcribed: {transcribedText}", false, ConsoleColor.Cyan);
-
-                // Replace placeholder with user's transcribed message
-                int placeholderIndex = messages.FindIndex(m => m.IsPlaceholder);
-                if (placeholderIndex >= 0)
-                {
-                    messages.RemoveAt(placeholderIndex);
-                }
-
-                // Add user message with transcribed text
-                AddMessage("User", transcribedText, true);
-
-                // Add new placeholder for AI response
-                ChatMessage aiPlaceholder = new ChatMessage("AI", "...", false, isPlaceholder: true);
-                messages.Add(aiPlaceholder);
-                pendingResponseMessage = aiPlaceholder;
-                ScrollToBottom();
-            }
-            catch (Exception ex)
-            {
-                Log($"❌ Error processing voice transcription: {ex.Message}", false, ConsoleColor.Red);
             }
         }
 
