@@ -239,3 +239,4 @@ docker run -p 5000:5000 chess-backend
 - Consider streaming: send text response immediately, stream audio separately
 - Make TTS optional (toggle voice on/off)
 - Cache frequent responses
+- always let me build the project
