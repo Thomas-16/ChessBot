@@ -33,7 +33,7 @@ public class VoiceService
         try
         {
             // ElevenLabs text-to-speech API
-            string voiceId = "21m00Tcm4TlvDq8ikWAM"; // Rachel voice
+            string voiceId = "wyWA56cQNU2KqUW4eCsI"; // Some old british guy voice
             string url = $"https://api.elevenlabs.io/v1/text-to-speech/{voiceId}";
 
             var payload = new
