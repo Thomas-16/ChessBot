@@ -21,15 +21,17 @@ public class OpenAIService
         _logger = logger;
     }
 
-    public async Task<string> GetChessResponseAsync(string userMessage, string gameId, List<Models.ChatMessage> conversationHistory, ChessPositionContext? context = null)
+    public async Task<string> GetChessResponseAsync(string userMessage, string gameId, List<Models.ChatMessage> conversationHistory, ChessPositionContext? context = null, string? customSystemPrompt = null)
     {
         var startTime = DateTime.UtcNow;
         try
         {
             // Build messages list: system prompt → conversation history → current message with context
+            // Use custom system prompt if provided, otherwise use default
+            string systemPrompt = customSystemPrompt ?? AIPrompts.ChessOpponentSystemPrompt;
             List<OpenAI.Chat.ChatMessage> messages = new List<OpenAI.Chat.ChatMessage>
             {
-                new SystemChatMessage(AIPrompts.ChessOpponentSystemPrompt)
+                new SystemChatMessage(systemPrompt)
             };
 
             // Add conversation history

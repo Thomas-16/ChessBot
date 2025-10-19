@@ -39,6 +39,9 @@ namespace ChessChallenge.Application
         // Request timing
         private DateTime? lastRequestSentTime = null;
 
+        // Automatic message tracking
+        private bool isAutomaticMessagePending = false;
+
         // UI animation states
         private float inputBoxFocusLerp = 0f;
         private float sendButtonHoverLerp = 0f;
@@ -465,10 +468,10 @@ namespace ChessChallenge.Application
             bool mouseOver = MouseInRect(buttonRect);
             bool isRecording = audioService?.IsRecording == true;
 
-            // Check if transcription service is ready 
+            // Check if transcription service is ready
             GroqWhisperService? groqWhisper = Program.ServiceProvider?.GetService<GroqWhisperService>();
-            
-            bool canUse = pendingResponseMessage == null && audioService != null && groqWhisper?.IsInitialized == true; // Disable if waiting for response, no audio service, or no transcription available
+
+            bool canUse = pendingResponseMessage == null && !isAutomaticMessagePending && audioService != null && groqWhisper?.IsInitialized == true; // Disable if waiting for response, automatic message pending, no audio service, or no transcription available
             bool isPressed = mouseOver && Raylib.IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT);
 
             // Smooth hover/press animations
@@ -583,7 +586,7 @@ namespace ChessChallenge.Application
         {
             Rectangle buttonRect = new Rectangle(x, y, width, height);
             bool mouseOver = MouseInRect(buttonRect);
-            bool canSend = inputText.Length > 0 && pendingResponseMessage == null; // Disable if waiting for response
+            bool canSend = inputText.Length > 0 && pendingResponseMessage == null && !isAutomaticMessagePending; // Disable if waiting for response or automatic message pending
             bool isPressed = mouseOver && Raylib.IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT);
 
             // Smooth hover/press animations
@@ -767,8 +770,8 @@ namespace ChessChallenge.Application
                 inputText.Remove(inputText.Length - 1, 1);
             }
 
-            // Handle enter key (only if not waiting for response)
-            if (Raylib.IsKeyPressed(KeyboardKey.KEY_ENTER) && inputText.Length > 0 && pendingResponseMessage == null)
+            // Handle enter key (only if not waiting for response and no automatic message pending)
+            if (Raylib.IsKeyPressed(KeyboardKey.KEY_ENTER) && inputText.Length > 0 && pendingResponseMessage == null && !isAutomaticMessagePending)
             {
                 SendMessage();
             }
@@ -976,12 +979,98 @@ namespace ChessChallenge.Application
             }
         }
 
+        public bool CanSendAutomaticMessage()
+        {
+            // Don't send automatic message if:
+            // - User is typing (has text in input box)
+            // - User is recording voice
+            // - There's already a pending response
+            // - There's already an automatic message pending
+            bool userIsTyping = inputText.Length > 0;
+            bool userIsRecording = audioService?.IsRecording == true;
+            bool hasPendingResponse = pendingResponseMessage != null;
+
+            return !userIsTyping && !userIsRecording && !hasPendingResponse && !isAutomaticMessagePending;
+        }
+
+        public async void SendAutomaticChatMessage(string message, string customSystemPrompt)
+        {
+            if (!CanSendAutomaticMessage())
+            {
+                Log($"⏭️ Skipping automatic message - user is interacting or message pending", false, ConsoleColor.Yellow);
+                return;
+            }
+
+            if (backendApi == null || gameStorage == null)
+            {
+                Log($"⚠️ Cannot send automatic message - backend not configured", false, ConsoleColor.Yellow);
+                return;
+            }
+
+            string? gameId = gameStorage.GetCurrentGameId();
+            if (string.IsNullOrEmpty(gameId))
+            {
+                Log("⚠️ No active game session - cannot send automatic message", false, ConsoleColor.Yellow);
+                return;
+            }
+
+            try
+            {
+                Log($"🤖 Sending automatic chat message with custom prompt", false, ConsoleColor.Cyan);
+
+                // Mark automatic message as pending
+                isAutomaticMessagePending = true;
+
+                // Stop any ongoing typing effects and audio playback
+                foreach (var msg in messages)
+                {
+                    if (msg.IsTyping)
+                    {
+                        msg.IsTyping = false;
+                        msg.VisibleCharCount = msg.Message.Length;
+                    }
+                }
+                audioService?.StopAudio();
+
+                // Add placeholder "..." message for AI
+                ChatMessage placeholderMessage = new ChatMessage("AI", "...", false, isPlaceholder: true);
+                messages.Add(placeholderMessage);
+                ScrollToBottom();
+
+                // Start timeout tracking and timing
+                pendingResponseMessage = placeholderMessage;
+                pendingResponseStartTime = (float)Raylib.GetTime();
+                lastRequestSentTime = DateTime.UtcNow;
+
+                // Extract position context
+                ChessPositionContext? context = contextExtractor?.Invoke();
+
+                // Send automatic message with custom system prompt
+                bool success = await backendApi.SendChatMessageAsync(gameId, message, context, customSystemPrompt);
+
+                if (!success)
+                {
+                    // Remove placeholder on failure
+                    messages.Remove(placeholderMessage);
+                    pendingResponseMessage = null;
+                    isAutomaticMessagePending = false;
+                    Log("❌ Failed to send automatic message - backend not connected", false, ConsoleColor.Red);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Error sending automatic message: {ex.Message}", false, ConsoleColor.Red);
+                isAutomaticMessagePending = false;
+            }
+        }
+
         private void OnReceiveChatResponse(object response)
         {
             try
             {
-                // Clear timeout tracking since we got a response
+                // Clear timeout tracking and automatic message flag since we got a response
                 pendingResponseMessage = null;
+                isAutomaticMessagePending = false;
 
                 // Calculate response time
                 double responseTimeMs = 0;
@@ -1027,8 +1116,9 @@ namespace ChessChallenge.Application
             catch (Exception ex)
             {
                 Log($"❌ Error processing chat response: {ex.Message}", false, ConsoleColor.Red);
-                // Clear timeout tracking
+                // Clear timeout tracking and automatic message flag
                 pendingResponseMessage = null;
+                isAutomaticMessagePending = false;
                 // Remove placeholder on error
                 int placeholderIndex = messages.FindIndex(m => m.IsPlaceholder);
                 if (placeholderIndex >= 0)
@@ -1043,8 +1133,9 @@ namespace ChessChallenge.Application
         {
             Log($"❌ Chat error: {error}", false, ConsoleColor.Red);
 
-            // Clear timeout tracking
+            // Clear timeout tracking and automatic message flag
             pendingResponseMessage = null;
+            isAutomaticMessagePending = false;
 
             // Remove placeholder on error
             int placeholderIndex = messages.FindIndex(m => m.IsPlaceholder);

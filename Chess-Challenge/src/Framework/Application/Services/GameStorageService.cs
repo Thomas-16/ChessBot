@@ -9,6 +9,8 @@ namespace ChessChallenge.Application.Services
     {
         private readonly BackendApiService _backendApi;
         private string? _currentGameId;
+        private DateTime? _gameEndTimestamp;
+        private const double GracePeriodSeconds = 30.0;
 
         public GameStorageService(BackendApiService backendApi)
         {
@@ -39,6 +41,9 @@ namespace ChessChallenge.Application.Services
 
             try
             {
+                // Clear any grace period from previous game
+                _gameEndTimestamp = null;
+
                 _currentGameId = await _backendApi.StartNewGameAsync();
 
                 Log($"🔍 Backend API returned gameId: '{_currentGameId}'", false, ConsoleColor.Magenta);
@@ -100,14 +105,16 @@ namespace ChessChallenge.Application.Services
                     Log($"⚠️ Failed to save game: {_currentGameId}", false, ConsoleColor.Yellow);
                 }
 
-                // Clear current game ID after saving (successful or not)
-                _currentGameId = null;
+                // Start grace period - keep gameId alive for 30 seconds to allow post-game chat
+                _gameEndTimestamp = DateTime.UtcNow;
+                Log($"⏱️ Game ended - grace period active for {GracePeriodSeconds}s to allow post-game chat", false, ConsoleColor.Cyan);
                 return success;
             }
             catch (Exception ex)
             {
                 Log($"❌ Error saving game: {ex.Message}", false, ConsoleColor.Red);
-                _currentGameId = null;
+                // Still start grace period even on error
+                _gameEndTimestamp = DateTime.UtcNow;
                 return false;
             }
         }
@@ -126,12 +133,42 @@ namespace ChessChallenge.Application.Services
 
         public void ClearCurrentGame()
         {
-            _currentGameId = null;
+            // Only clear if grace period has expired or no grace period active
+            if (_gameEndTimestamp == null || !IsInGracePeriod())
+            {
+                _currentGameId = null;
+                _gameEndTimestamp = null;
+            }
+            else
+            {
+                Log($"⏱️ Not clearing gameId - still in grace period", false, ConsoleColor.Yellow);
+            }
         }
 
         public string? GetCurrentGameId()
         {
+            // Auto-clear if grace period expired
+            if (_gameEndTimestamp != null && !IsInGracePeriod())
+            {
+                Log($"⏱️ Grace period expired - clearing gameId", false, ConsoleColor.Gray);
+                _currentGameId = null;
+                _gameEndTimestamp = null;
+            }
+
             return _currentGameId;
+        }
+
+        public bool IsInGracePeriod()
+        {
+            if (_gameEndTimestamp == null) return false;
+
+            double elapsedSeconds = (DateTime.UtcNow - _gameEndTimestamp.Value).TotalSeconds;
+            return elapsedSeconds < GracePeriodSeconds;
+        }
+
+        public bool IsGameActive()
+        {
+            return !string.IsNullOrEmpty(_currentGameId) && _gameEndTimestamp == null;
         }
 
         private static string ConvertGameResultToString(GameResult result)

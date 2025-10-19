@@ -52,7 +52,7 @@ public class ChessHub : Hub
         }
     }
 
-    public async Task SendChatMessage(string gameId, string message, ChessPositionContext? context = null)
+    public async Task SendChatMessage(string gameId, string message, ChessPositionContext? context = null, string? customSystemPrompt = null)
     {
         try
         {
@@ -85,11 +85,11 @@ public class ChessHub : Hub
             string aiResponse;
             if (useGroq)
             {
-                aiResponse = await _groqService.GetChessResponseAsync(message, gameId, conversationHistory, context);
+                aiResponse = await _groqService.GetChessResponseAsync(message, gameId, conversationHistory, context, customSystemPrompt);
             }
             else
             {
-                aiResponse = await _openAiService.GetChessResponseAsync(message, gameId, conversationHistory, context);
+                aiResponse = await _openAiService.GetChessResponseAsync(message, gameId, conversationHistory, context, customSystemPrompt);
             }
 
             // Save AI message
