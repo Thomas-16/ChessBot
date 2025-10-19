@@ -4,6 +4,7 @@ using Raylib_cs;
 using System;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Threading;
@@ -69,6 +70,10 @@ namespace ChessChallenge.Application
         
         private DateTime lastUserMessageTime = DateTime.MinValue;
 
+        // Game end state display
+        private GameResult? currentGameResult = null;
+        private string gameEndText = "";
+
         public ChallengeController()
         {
             Log($"Launching Chess-Challenge version {Settings.Version}");
@@ -101,6 +106,11 @@ namespace ChessChallenge.Application
         {
             // End any ongoing game
             EndGame(GameResult.DrawByArbiter, log: false, autoStartNextBotMatch: false);
+
+            // Clear previous game result display
+            currentGameResult = null;
+            gameEndText = "";
+
             gameID = rng.Next();
 
             // Start new game session in backend
@@ -322,6 +332,10 @@ namespace ChessChallenge.Application
                 isWaitingToPlayMove = false;
                 gameID = -1;
 
+                // Store game result for display
+                currentGameResult = result;
+                gameEndText = GetGameResultText(result);
+
                 if (log)
                 {
                     Log("Game Over: " + result, false, ConsoleColor.Blue);
@@ -509,6 +523,28 @@ namespace ChessChallenge.Application
             string nameW = GetPlayerName(PlayerWhite);
             string nameB = GetPlayerName(PlayerBlack);
             boardUI.DrawPlayerNames(nameW, nameB, PlayerWhite.TimeRemainingMs, PlayerBlack.TimeRemainingMs, isPlaying);
+
+            // Draw game end state if game is over
+            DrawGameEndState();
+        }
+
+        void DrawGameEndState()
+        {
+            if (currentGameResult.HasValue && !string.IsNullOrEmpty(gameEndText))
+            {
+                // Position above the board in world coordinates
+                // Board is centered at (0, 0), top edge is at y = -400
+                Vector2 textPos = new Vector2(0, -450);
+                int fontSize = 48;
+
+                // Draw shadow for better visibility
+                Vector2 shadowOffset = new Vector2(3, 3);
+                UIHelper.DrawText(gameEndText, textPos + shadowOffset, fontSize, 1, new Color(0, 0, 0, 150), UIHelper.AlignH.Centre);
+
+                // Draw main text in bright color
+                Color textColor = new Color(255, 220, 100, 255); // Gold/yellow color for visibility
+                UIHelper.DrawText(gameEndText, textPos, fontSize, 1, textColor, UIHelper.AlignH.Centre);
+            }
         }
 
         public void DrawOverlay()
@@ -571,6 +607,25 @@ namespace ChessChallenge.Application
             public int NumIllegalMoves;
 
             public BotMatchStats(string name) => BotName = name;
+        }
+
+        private string GetGameResultText(GameResult result)
+        {
+            return result switch
+            {
+                GameResult.WhiteIsMated => "Black wins by checkmate!",
+                GameResult.BlackIsMated => "White wins by checkmate!",
+                GameResult.Stalemate => "Draw by stalemate",
+                GameResult.Repetition => "Draw by threefold repetition",
+                GameResult.FiftyMoveRule => "Draw by fifty-move rule",
+                GameResult.InsufficientMaterial => "Draw by insufficient material",
+                GameResult.DrawByArbiter => "Draw",
+                GameResult.WhiteTimeout => "Black wins on time!",
+                GameResult.BlackTimeout => "White wins on time!",
+                GameResult.WhiteIllegalMove => "Black wins - White made an illegal move",
+                GameResult.BlackIllegalMove => "White wins - Black made an illegal move",
+                _ => ""
+            };
         }
 
         public ChessPositionContext? GetCurrentPositionContext()
