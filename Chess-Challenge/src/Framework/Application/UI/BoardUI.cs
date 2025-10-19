@@ -271,39 +271,6 @@ namespace ChessChallenge.Application
             float colLerpSpeed = 16;
             topTextCol = LerpColour(topTextCol, textTopTargetCol, Raylib.GetFrameTime() * colLerpSpeed);
             bottomTextCol = LerpColour(bottomTextCol, textBottomTargetCol, Raylib.GetFrameTime() * colLerpSpeed);
-
-            //Color textColTop = topTurnToMove ? activeTextCol : inactiveTextCol;
-
-            if (!Program.SIMPLIFIED_MODE)
-            {
-                Draw(boardStartY + squareSize * 8 + spaceY, colNameBottom, nameBottom, timeBottom, bottomTextCol);
-                Draw(boardStartY - spaceY, colNameTop, nameTop, timeTop, topTextCol);
-            }
-
-            void Draw(float y, string colName, string name, int timeMs, Color textCol)
-            {
-                const int fontSize = 36;
-                const int fontSpacing = 1;
-                var namePos = new Vector2(boardStartX, y);
-
-                UIHelper.DrawText($"{colName}: {name}", namePos, fontSize, fontSpacing, nameCol);
-                var timePos = new Vector2(boardStartX + squareSize * 8, y);
-                string timeText;
-                if (timeMs == int.MaxValue)
-                {
-                    timeText = "Time: Unlimited";
-                }
-                else
-                {
-                    double secondsRemaining = timeMs / 1000.0;
-                    int numMinutes = (int)(secondsRemaining / 60);
-                    int numSeconds = (int)(secondsRemaining - numMinutes * 60);
-                    int dec = (int)((secondsRemaining - numMinutes * 60 - numSeconds) * 10);
-
-                    timeText = $"Time: {numMinutes:00}:{numSeconds:00}.{dec}";
-                }
-                UIHelper.DrawText(timeText, timePos, fontSize, fontSpacing, textCol, UIHelper.AlignH.Right);
-            }
         }
 
         public void ResetSquareColours(bool keepPrevMoveHighlight = false)

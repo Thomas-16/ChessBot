@@ -17,7 +17,6 @@ namespace ChessChallenge.Application
         static Camera2D cam;
 
         public static bool UCI_MODE = false;
-        public static bool SIMPLIFIED_MODE = true;
 
         // Dependency injection services
         public static IServiceProvider? ServiceProvider { get; private set; }

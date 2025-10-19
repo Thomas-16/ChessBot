@@ -15,37 +15,11 @@ namespace ChessChallenge.Application
             float breakSpacing = spacing * 0.6f;
 
             // Game Buttons
-            if (NextButtonInRow(Program.SIMPLIFIED_MODE ? "Start New Game" : "Human vs MainBot", ref buttonPos, spacing, buttonSize))
+            if (NextButtonInRow("Start New Game", ref buttonPos, spacing, buttonSize))
             {
                 var whiteType = controller.HumanWasWhiteLastGame ? ChallengeController.PlayerType.MyBot : ChallengeController.PlayerType.Human;
                 var blackType = !controller.HumanWasWhiteLastGame ? ChallengeController.PlayerType.MyBot : ChallengeController.PlayerType.Human;
                 controller.StartNewGame(whiteType, blackType);
-            }
-            
-            if (!Program.SIMPLIFIED_MODE)
-            {
-                if (NextButtonInRow("MainBot vs MainBot", ref buttonPos, spacing, buttonSize))
-                {
-                    controller.StartNewBotMatch(ChallengeController.PlayerType.MyBot, ChallengeController.PlayerType.MyBot);
-                }
-                if (NextButtonInRow("MainBot vs TestBot", ref buttonPos, spacing, buttonSize))
-                {
-                    controller.StartNewBotMatch(ChallengeController.PlayerType.MyBot, ChallengeController.PlayerType.EvilBot);
-                }
-
-                // Page buttons
-                buttonPos.Y += breakSpacing;
-
-                if (NextButtonInRow("Save Games", ref buttonPos, spacing, buttonSize))
-                {
-                    string pgns = controller.AllPGNs;
-                    string directoryPath = Path.Combine(FileHelper.AppDataPath, "Games");
-                    Directory.CreateDirectory(directoryPath);
-                    string fileName = FileHelper.GetUniqueFileName(directoryPath, "games", ".txt");
-                    string fullPath = Path.Combine(directoryPath, fileName);
-                    File.WriteAllText(fullPath, pgns);
-                    ConsoleHelper.Log("Saved games to " + fullPath, false, ConsoleColor.Blue);
-                }
             }
 
             // Difficulty selection
