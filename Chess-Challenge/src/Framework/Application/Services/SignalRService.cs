@@ -133,7 +133,7 @@ namespace ChessChallenge.Application.Services
             }
         }
 
-        public async Task<bool> SendChatMessageAsync(string gameId, string message, ChessPositionContext? context = null, string? customSystemPrompt = null)
+        public async Task<bool> SendChatMessageAsync(string gameId, string message, ChessPositionContext? context = null)
         {
             if (!_isConnected || _connection == null)
             {
@@ -143,12 +143,9 @@ namespace ChessChallenge.Application.Services
 
             try
             {
-                string logMessage = customSystemPrompt != null
-                    ? $"💬 Sending automatic chat message via SignalR: {gameId}"
-                    : $"💬 Sending chat message via SignalR: {gameId}";
-                Log(logMessage, false, ConsoleColor.Cyan);
+                Log($"💬 Sending chat message via SignalR: {gameId}", false, ConsoleColor.Cyan);
 
-                await _connection.InvokeAsync("SendChatMessage", gameId, message, context, customSystemPrompt);
+                await _connection.InvokeAsync("SendChatMessage", gameId, message, context);
                 return true;
             }
             catch (Exception ex)

@@ -394,21 +394,18 @@ namespace ChessChallenge.Application
             }
 
             // Determine who won and generate appropriate prompt
-            string customPrompt = "";
-            string triggerMessage = "";
+            string prompt = "";
 
             if (result == GameResult.WhiteIsMated)
             {
                 // Black won (AI or Human)
                 if (PlayerBlack.IsBot)
                 {
-                    customPrompt = "You just checkmated the user and won the game. React to your victory in 1-2 brief sentences. Be gracious but confident.";
-                    triggerMessage = "I won";
+                    prompt = "You just checkmated the user and won the game. React to your victory in 1-2 brief sentences. Be gracious but confident.";
                 }
                 else
                 {
-                    customPrompt = "You just got checkmated by the user and lost the game. React to your loss in 1-2 brief sentences. Be a good sport about it.";
-                    triggerMessage = "I lost";
+                    prompt = "You just got checkmated by the user and lost the game. React to your loss in 1-2 brief sentences. Be a good sport about it.";
                 }
             }
             else if (result == GameResult.BlackIsMated)
@@ -416,27 +413,24 @@ namespace ChessChallenge.Application
                 // White won (AI or Human)
                 if (PlayerWhite.IsBot)
                 {
-                    customPrompt = "You just checkmated the user and won the game. React to your victory in 1-2 brief sentences. Be gracious but confident.";
-                    triggerMessage = "I won";
+                    prompt = "You just checkmated the user and won the game. React to your victory in 1-2 brief sentences. Be gracious but confident.";
                 }
                 else
                 {
-                    customPrompt = "You just got checkmated by the user and lost the game. React to your loss in 1-2 brief sentences. Be a good sport about it.";
-                    triggerMessage = "I lost";
+                    prompt = "You just got checkmated by the user and lost the game. React to your loss in 1-2 brief sentences. Be a good sport about it.";
                 }
             }
             else if (Arbiter.IsDrawResult(result))
             {
-                // Draw/Stalemate
-                customPrompt = "The game just ended in a draw/stalemate. React briefly in 1-2 sentences.";
-                triggerMessage = "Game ended in a draw";
+                // Draw
+                prompt = "The game just ended in a draw. React briefly in 1-2 sentences.";
             }
 
             // Send automatic chat message if we have a prompt
-            if (!string.IsNullOrEmpty(customPrompt))
+            if (!string.IsNullOrEmpty(prompt))
             {
-                Log($"🎮 Triggering game end chat: {triggerMessage}", false, ConsoleColor.Cyan);
-                chatUI.SendAutomaticChatMessage(triggerMessage, customPrompt);
+                Log($"🎮 Triggering game end chat: {prompt}", false, ConsoleColor.Cyan);
+                chatUI.SendAutomaticChatMessage(prompt);
             }
         }
 

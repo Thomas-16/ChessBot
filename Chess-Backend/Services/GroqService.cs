@@ -22,16 +22,14 @@ public class GroqService
                   throw new InvalidOperationException("Groq API key not found. Set GROQ_API_KEY environment variable.");
     }
 
-    public async Task<string> GetChessResponseAsync(string userMessage, string gameId, List<ChatMessage> conversationHistory, ChessPositionContext? context = null, string? customSystemPrompt = null)
+    public async Task<string> GetChessResponseAsync(string userMessage, string gameId, List<ChatMessage> conversationHistory, ChessPositionContext? context = null)
     {
         try
         {
             // Build messages array: system prompt → conversation history → current message with context
-            // Use custom system prompt if provided, otherwise use default
-            string systemPrompt = customSystemPrompt ?? AIPrompts.ChessOpponentSystemPrompt;
             var messages = new List<object>
             {
-                new { role = "system", content = systemPrompt }
+                new { role = "system", content = AIPrompts.ChessOpponentSystemPrompt }
             };
 
             // Add conversation history

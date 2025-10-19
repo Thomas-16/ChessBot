@@ -66,14 +66,14 @@ namespace ChessChallenge.Application.Services
             return await _signalRService.SaveGameResultAsync(gameId, pgn, result);
         }
 
-        public async Task<bool> SendChatMessageAsync(string gameId, string message, ChessPositionContext? context = null, string? customSystemPrompt = null)
+        public async Task<bool> SendChatMessageAsync(string gameId, string message, ChessPositionContext? context = null)
         {
             if (!_config.EnableBackendIntegration || !IsConnected || string.IsNullOrEmpty(gameId))
             {
                 return false;
             }
 
-            return await _signalRService.SendChatMessageAsync(gameId, message, context, customSystemPrompt);
+            return await _signalRService.SendChatMessageAsync(gameId, message, context);
         }
         
 

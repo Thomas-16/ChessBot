@@ -993,7 +993,7 @@ namespace ChessChallenge.Application
             return !userIsTyping && !userIsRecording && !hasPendingResponse && !isAutomaticMessagePending;
         }
 
-        public async void SendAutomaticChatMessage(string message, string customSystemPrompt)
+        public async void SendAutomaticChatMessage(string message)
         {
             if (!CanSendAutomaticMessage())
             {
@@ -1046,7 +1046,7 @@ namespace ChessChallenge.Application
                 ChessPositionContext? context = contextExtractor?.Invoke();
 
                 // Send automatic message with custom system prompt
-                bool success = await backendApi.SendChatMessageAsync(gameId, message, context, customSystemPrompt);
+                bool success = await backendApi.SendChatMessageAsync(gameId, message, context);
 
                 if (!success)
                 {
