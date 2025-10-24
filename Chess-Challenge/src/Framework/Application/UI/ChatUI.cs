@@ -211,6 +211,16 @@ namespace ChessChallenge.Application
 
         public void Draw()
         {
+            // Debug: Log panel position once per second
+            if ((DateTime.Now.Millisecond / 1000) % 1 == 0 && DateTime.Now.Millisecond < 100)
+            {
+                Vector2 pos = GetPanelPosition();
+                Vector2 size = GetPanelSize();
+                int screenW = Raylib.GetScreenWidth();
+                int screenH = Raylib.GetScreenHeight();
+                Log($"📊 Chat UI - Screen: {screenW}x{screenH}, Panel Pos: ({pos.X},{pos.Y}), Size: ({size.X},{size.Y})", false, ConsoleColor.Cyan);
+            }
+
             DrawChatPanel();
             DrawChatHeader();
             DrawMessages();
@@ -219,18 +229,23 @@ namespace ChessChallenge.Application
 
         private Vector2 GetPanelPosition()
         {
-            // Calculate panel position based on actual render size
-            // Use GetRenderWidth/Height for correct dimensions on Retina displays
-            int renderWidth = Raylib.GetRenderWidth();
-            int renderHeight = Raylib.GetRenderHeight();
+            // Calculate panel position based on screen size
+            // Must use GetScreenWidth to match UIHelper.Scale() which also uses GetScreenWidth
+            int screenWidth = Raylib.GetScreenWidth();
+            int screenHeight = Raylib.GetScreenHeight();
 
             float scaledWidth = UIHelper.Scale(panelWidthRef);
             float scaledHeight = UIHelper.Scale(panelHeightRef);
             float scaledRightMargin = UIHelper.Scale(panelRightMarginRef);
             float scaledTopMargin = UIHelper.Scale(panelTopMarginRef);
 
-            float posX = renderWidth - scaledWidth - scaledRightMargin;
+            // Calculate position from right edge
+            float posX = screenWidth - scaledWidth - scaledRightMargin;
             float posY = scaledTopMargin;
+
+            // Ensure panel stays within screen bounds
+            posX = Math.Max(0, Math.Min(posX, screenWidth - scaledWidth));
+            posY = Math.Max(0, Math.Min(posY, screenHeight - scaledHeight));
 
             return new Vector2(posX, posY);
         }
