@@ -211,16 +211,6 @@ namespace ChessChallenge.Application
 
         public void Draw()
         {
-            // Debug: Log panel position once per second
-            if ((DateTime.Now.Millisecond / 1000) % 1 == 0 && DateTime.Now.Millisecond < 100)
-            {
-                Vector2 pos = GetPanelPosition();
-                Vector2 size = GetPanelSize();
-                int screenW = Raylib.GetScreenWidth();
-                int screenH = Raylib.GetScreenHeight();
-                Log($"📊 Chat UI - Screen: {screenW}x{screenH}, Panel Pos: ({pos.X},{pos.Y}), Size: ({size.X},{size.Y})", false, ConsoleColor.Cyan);
-            }
-
             DrawChatPanel();
             DrawChatHeader();
             DrawMessages();
@@ -309,22 +299,8 @@ namespace ChessChallenge.Application
             float messageAreaX = scaledPos.X + scaledPadding;
             float messageAreaWidth = scaledSize.X - scaledPadding * 2;
 
-            // Enable scissor mode for clipping (with safety checks)
-            int scissorX = Math.Max(0, (int)messageAreaX);
-            int scissorY = Math.Max(0, (int)messageAreaY);
-            int scissorW = Math.Max(0, (int)messageAreaWidth);
-            int scissorH = Math.Max(0, (int)messageAreaHeight);
-
-            // Clamp to render buffer size
-            int renderWidth = Raylib.GetRenderWidth();
-            int renderHeight = Raylib.GetRenderHeight();
-            scissorW = Math.Min(scissorW, renderWidth - scissorX);
-            scissorH = Math.Min(scissorH, renderHeight - scissorY);
-
-            if (scissorW > 0 && scissorH > 0)
-            {
-                Raylib.BeginScissorMode(scissorX, scissorY, scissorW, scissorH);
-            }
+            // TEMPORARILY DISABLE scissor mode to test if it's the culprit
+            // Raylib.BeginScissorMode((int)messageAreaX, (int)messageAreaY, (int)messageAreaWidth, (int)messageAreaHeight);
 
             float currentY = messageAreaY + scrollOffset;
 
@@ -334,10 +310,7 @@ namespace ChessChallenge.Application
                 currentY += scaledPadding;
             }
 
-            if (scissorW > 0 && scissorH > 0)
-            {
-                Raylib.EndScissorMode();
-            }
+            // Raylib.EndScissorMode();
 
             // Draw scrollbar if content overflows
             DrawScrollbar(messageAreaX, messageAreaY, messageAreaWidth, messageAreaHeight);
@@ -482,22 +455,8 @@ namespace ChessChallenge.Application
                 inputTextOffset = 0f;
             }
 
-            // Enable scissor mode for text clipping (with safety checks)
-            int inputScissorX = Math.Max(0, (int)(inputX + leftPadding));
-            int inputScissorY = Math.Max(0, (int)inputY);
-            int inputScissorW = Math.Max(0, (int)availableWidth);
-            int inputScissorH = Math.Max(0, (int)scaledInputHeight);
-
-            // Clamp to render buffer size
-            int renderWidth = Raylib.GetRenderWidth();
-            int renderHeight = Raylib.GetRenderHeight();
-            inputScissorW = Math.Min(inputScissorW, renderWidth - inputScissorX);
-            inputScissorH = Math.Min(inputScissorH, renderHeight - inputScissorY);
-
-            if (inputScissorW > 0 && inputScissorH > 0)
-            {
-                Raylib.BeginScissorMode(inputScissorX, inputScissorY, inputScissorW, inputScissorH);
-            }
+            // TEMPORARILY DISABLE scissor mode to test if it's the culprit
+            // Raylib.BeginScissorMode((int)(inputX + leftPadding), (int)inputY, (int)availableWidth, (int)scaledInputHeight);
 
             Vector2 textPos = new Vector2(inputX + leftPadding + inputTextOffset, inputY + scaledInputHeight / 2);
             UIHelper.DrawText(displayText, textPos, fontSize, 1, textColor, UIHelper.AlignH.Left, UIHelper.AlignV.Centre);
@@ -514,10 +473,7 @@ namespace ChessChallenge.Application
                 );
             }
 
-            if (inputScissorW > 0 && inputScissorH > 0)
-            {
-                Raylib.EndScissorMode();
-            }
+            // Raylib.EndScissorMode();
 
             // Microphone button
             DrawMicButton(micButtonX, inputY, micButtonWidth, scaledInputHeight);
