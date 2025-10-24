@@ -219,16 +219,17 @@ namespace ChessChallenge.Application
 
         private Vector2 GetPanelPosition()
         {
-            // Calculate panel position based on actual screen size
-            int screenWidth = Raylib.GetScreenWidth();
-            int screenHeight = Raylib.GetScreenHeight();
+            // Calculate panel position based on actual render size
+            // Use GetRenderWidth/Height for correct dimensions on Retina displays
+            int renderWidth = Raylib.GetRenderWidth();
+            int renderHeight = Raylib.GetRenderHeight();
 
             float scaledWidth = UIHelper.Scale(panelWidthRef);
             float scaledHeight = UIHelper.Scale(panelHeightRef);
             float scaledRightMargin = UIHelper.Scale(panelRightMarginRef);
             float scaledTopMargin = UIHelper.Scale(panelTopMarginRef);
 
-            float posX = screenWidth - scaledWidth - scaledRightMargin;
+            float posX = renderWidth - scaledWidth - scaledRightMargin;
             float posY = scaledTopMargin;
 
             return new Vector2(posX, posY);
@@ -293,13 +294,22 @@ namespace ChessChallenge.Application
             float messageAreaX = scaledPos.X + scaledPadding;
             float messageAreaWidth = scaledSize.X - scaledPadding * 2;
 
-            // Enable scissor mode for clipping
-            Raylib.BeginScissorMode(
-                (int)messageAreaX,
-                (int)messageAreaY,
-                (int)messageAreaWidth,
-                (int)messageAreaHeight
-            );
+            // Enable scissor mode for clipping (with safety checks)
+            int scissorX = Math.Max(0, (int)messageAreaX);
+            int scissorY = Math.Max(0, (int)messageAreaY);
+            int scissorW = Math.Max(0, (int)messageAreaWidth);
+            int scissorH = Math.Max(0, (int)messageAreaHeight);
+
+            // Clamp to render buffer size
+            int renderWidth = Raylib.GetRenderWidth();
+            int renderHeight = Raylib.GetRenderHeight();
+            scissorW = Math.Min(scissorW, renderWidth - scissorX);
+            scissorH = Math.Min(scissorH, renderHeight - scissorY);
+
+            if (scissorW > 0 && scissorH > 0)
+            {
+                Raylib.BeginScissorMode(scissorX, scissorY, scissorW, scissorH);
+            }
 
             float currentY = messageAreaY + scrollOffset;
 
@@ -309,7 +319,10 @@ namespace ChessChallenge.Application
                 currentY += scaledPadding;
             }
 
-            Raylib.EndScissorMode();
+            if (scissorW > 0 && scissorH > 0)
+            {
+                Raylib.EndScissorMode();
+            }
 
             // Draw scrollbar if content overflows
             DrawScrollbar(messageAreaX, messageAreaY, messageAreaWidth, messageAreaHeight);
@@ -454,13 +467,22 @@ namespace ChessChallenge.Application
                 inputTextOffset = 0f;
             }
 
-            // Enable scissor mode for text clipping
-            Raylib.BeginScissorMode(
-                (int)(inputX + leftPadding),
-                (int)inputY,
-                (int)availableWidth,
-                (int)scaledInputHeight
-            );
+            // Enable scissor mode for text clipping (with safety checks)
+            int inputScissorX = Math.Max(0, (int)(inputX + leftPadding));
+            int inputScissorY = Math.Max(0, (int)inputY);
+            int inputScissorW = Math.Max(0, (int)availableWidth);
+            int inputScissorH = Math.Max(0, (int)scaledInputHeight);
+
+            // Clamp to render buffer size
+            int renderWidth = Raylib.GetRenderWidth();
+            int renderHeight = Raylib.GetRenderHeight();
+            inputScissorW = Math.Min(inputScissorW, renderWidth - inputScissorX);
+            inputScissorH = Math.Min(inputScissorH, renderHeight - inputScissorY);
+
+            if (inputScissorW > 0 && inputScissorH > 0)
+            {
+                Raylib.BeginScissorMode(inputScissorX, inputScissorY, inputScissorW, inputScissorH);
+            }
 
             Vector2 textPos = new Vector2(inputX + leftPadding + inputTextOffset, inputY + scaledInputHeight / 2);
             UIHelper.DrawText(displayText, textPos, fontSize, 1, textColor, UIHelper.AlignH.Left, UIHelper.AlignV.Centre);
@@ -477,7 +499,10 @@ namespace ChessChallenge.Application
                 );
             }
 
-            Raylib.EndScissorMode();
+            if (inputScissorW > 0 && inputScissorH > 0)
+            {
+                Raylib.EndScissorMode();
+            }
 
             // Microphone button
             DrawMicButton(micButtonX, inputY, micButtonWidth, scaledInputHeight);
