@@ -52,8 +52,10 @@ namespace ChessChallenge.Application
         private float micButtonPulseLerp = 0f;
 
         // Layout constants (reference 1920x1080)
-        private readonly Vector2 panelPos = new(1420, 150);
-        private readonly Vector2 panelSize = new(450, 800);
+        private readonly float panelWidthRef = 450f;
+        private readonly float panelHeightRef = 800f;
+        private readonly float panelRightMarginRef = 50f; // Distance from right edge
+        private readonly float panelTopMarginRef = 150f; // Distance from top
         private readonly float headerHeight = 50f;
         private readonly float inputHeight = 60f;
         private readonly float messagePadding = 10f;
@@ -129,8 +131,8 @@ namespace ChessChallenge.Application
             }
 
             // Scrollbar fade animation
-            Vector2 scaledPos = UIHelper.Scale(panelPos);
-            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            Vector2 scaledPos = GetPanelPosition();
+            Vector2 scaledSize = GetPanelSize();
             float scaledHeaderHeight = UIHelper.Scale(headerHeight);
             float scaledInputHeight = UIHelper.Scale(inputHeight);
             float scaledPadding = UIHelper.Scale(messagePadding);
@@ -215,10 +217,32 @@ namespace ChessChallenge.Application
             DrawInputBox();
         }
 
+        private Vector2 GetPanelPosition()
+        {
+            // Calculate panel position based on actual screen size
+            int screenWidth = Raylib.GetScreenWidth();
+            int screenHeight = Raylib.GetScreenHeight();
+
+            float scaledWidth = UIHelper.Scale(panelWidthRef);
+            float scaledHeight = UIHelper.Scale(panelHeightRef);
+            float scaledRightMargin = UIHelper.Scale(panelRightMarginRef);
+            float scaledTopMargin = UIHelper.Scale(panelTopMarginRef);
+
+            float posX = screenWidth - scaledWidth - scaledRightMargin;
+            float posY = scaledTopMargin;
+
+            return new Vector2(posX, posY);
+        }
+
+        private Vector2 GetPanelSize()
+        {
+            return new Vector2(UIHelper.Scale(panelWidthRef), UIHelper.Scale(panelHeightRef));
+        }
+
         private void DrawChatPanel()
         {
-            Vector2 scaledPos = UIHelper.Scale(panelPos);
-            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            Vector2 scaledPos = GetPanelPosition();
+            Vector2 scaledSize = GetPanelSize();
 
             // Semi-transparent dark background with subtle gradient effect
             Rectangle panelRect = new Rectangle(scaledPos.X, scaledPos.Y, scaledSize.X, scaledSize.Y);
@@ -234,8 +258,8 @@ namespace ChessChallenge.Application
 
         private void DrawChatHeader()
         {
-            Vector2 scaledPos = UIHelper.Scale(panelPos);
-            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            Vector2 scaledPos = GetPanelPosition();
+            Vector2 scaledSize = GetPanelSize();
             float scaledHeaderHeight = UIHelper.Scale(headerHeight);
 
             // Header background
@@ -257,8 +281,8 @@ namespace ChessChallenge.Application
 
         private void DrawMessages()
         {
-            Vector2 scaledPos = UIHelper.Scale(panelPos);
-            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            Vector2 scaledPos = GetPanelPosition();
+            Vector2 scaledSize = GetPanelSize();
             float scaledHeaderHeight = UIHelper.Scale(headerHeight);
             float scaledInputHeight = UIHelper.Scale(inputHeight);
             float scaledPadding = UIHelper.Scale(messagePadding);
@@ -375,8 +399,8 @@ namespace ChessChallenge.Application
 
         private void DrawInputBox()
         {
-            Vector2 scaledPos = UIHelper.Scale(panelPos);
-            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            Vector2 scaledPos = GetPanelPosition();
+            Vector2 scaledSize = GetPanelSize();
             float scaledInputHeight = UIHelper.Scale(inputHeight);
             float scaledPadding = UIHelper.Scale(messagePadding);
 
@@ -655,8 +679,8 @@ namespace ChessChallenge.Application
 
         private void HandleInputBoxClick()
         {
-            Vector2 scaledPos = UIHelper.Scale(panelPos);
-            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            Vector2 scaledPos = GetPanelPosition();
+            Vector2 scaledSize = GetPanelSize();
             float scaledInputHeight = UIHelper.Scale(inputHeight);
             float scaledPadding = UIHelper.Scale(messagePadding);
 
@@ -674,8 +698,8 @@ namespace ChessChallenge.Application
 
         private void HandleScrollInput()
         {
-            Vector2 scaledPos = UIHelper.Scale(panelPos);
-            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            Vector2 scaledPos = GetPanelPosition();
+            Vector2 scaledSize = GetPanelSize();
             float scaledHeaderHeight = UIHelper.Scale(headerHeight);
             float scaledInputHeight = UIHelper.Scale(inputHeight);
             float scaledPadding = UIHelper.Scale(messagePadding);
@@ -714,8 +738,8 @@ namespace ChessChallenge.Application
 
         private float CalculateTotalContentHeight()
         {
-            Vector2 scaledPos = UIHelper.Scale(panelPos);
-            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            Vector2 scaledPos = GetPanelPosition();
+            Vector2 scaledSize = GetPanelSize();
             float scaledHeaderHeight = UIHelper.Scale(headerHeight);
             float scaledInputHeight = UIHelper.Scale(inputHeight);
             float scaledPadding = UIHelper.Scale(messagePadding);
@@ -1188,8 +1212,8 @@ namespace ChessChallenge.Application
 
         private void ScrollToBottom()
         {
-            Vector2 scaledPos = UIHelper.Scale(panelPos);
-            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            Vector2 scaledPos = GetPanelPosition();
+            Vector2 scaledSize = GetPanelSize();
             float scaledHeaderHeight = UIHelper.Scale(headerHeight);
             float scaledInputHeight = UIHelper.Scale(inputHeight);
             float scaledPadding = UIHelper.Scale(messagePadding);
@@ -1211,8 +1235,8 @@ namespace ChessChallenge.Application
 
         private bool IsScrolledToBottom()
         {
-            Vector2 scaledPos = UIHelper.Scale(panelPos);
-            Vector2 scaledSize = UIHelper.Scale(panelSize);
+            Vector2 scaledPos = GetPanelPosition();
+            Vector2 scaledSize = GetPanelSize();
             float scaledHeaderHeight = UIHelper.Scale(headerHeight);
             float scaledInputHeight = UIHelper.Scale(inputHeight);
             float scaledPadding = UIHelper.Scale(messagePadding);
