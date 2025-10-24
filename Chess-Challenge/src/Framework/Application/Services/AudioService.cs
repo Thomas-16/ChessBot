@@ -1,8 +1,10 @@
 using Raylib_cs;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
-using NAudio.Wave;
+using OpenTK.Audio.OpenAL;
 using static ChessChallenge.Application.ConsoleHelper;
 
 namespace ChessChallenge.Application.Services
@@ -13,12 +15,14 @@ namespace ChessChallenge.Application.Services
         private bool isPlaying;
         private string? tempAudioFilePath;
 
-        // Recording state
-        private WaveInEvent? waveIn;
-        private MemoryStream? recordingStream;
-        private WaveFileWriter? waveWriter;
+        // Recording state (OpenAL cross-platform)
+        private ALCaptureDevice captureDevice;
+        private List<short> recordedSamples;
         private bool isRecording;
         private DateTime recordingStartTime;
+        private Thread? recordingThread;
+        private bool shouldStopRecording;
+        private const int SampleRate = 16000; // 16kHz for Whisper
         private const int MaxRecordingSeconds = 30;
         private float currentVolume = 0f; // 0.0 to 1.0
 
@@ -63,7 +67,7 @@ namespace ChessChallenge.Application.Services
                         music.looping = false; // Don't loop the audio
                         Raylib.SetMusicVolume(music, 1.0f);
                         currentMusic = music;
-                        
+
                         Raylib.PlayMusicStream(currentMusic.Value);
                         isPlaying = true;
                         Log("🔊 Playing TTS audio", false, ConsoleColor.Green);
@@ -142,30 +146,38 @@ namespace ChessChallenge.Application.Services
 
             try
             {
-                // Check if microphone is available
-                if (WaveInEvent.DeviceCount == 0)
+                // Get default capture device
+                string? deviceName = ALC.GetString(ALDevice.Null, AlcGetString.CaptureDefaultDeviceSpecifier);
+
+                if (string.IsNullOrEmpty(deviceName))
                 {
                     Log("❌ No microphone device found", false, ConsoleColor.Red);
                     return false;
                 }
 
-                // Initialize recording
-                waveIn = new WaveInEvent
+                Log($"🎤 Opening capture device: {deviceName}", false, ConsoleColor.Cyan);
+
+                // Open capture device: 16kHz, mono, 16-bit
+                captureDevice = ALC.CaptureOpenDevice(deviceName, SampleRate, ALFormat.Mono16, SampleRate / 2);
+
+                if (captureDevice == null || captureDevice.Handle == IntPtr.Zero)
                 {
-                    WaveFormat = new WaveFormat(16000, 1) // 16kHz, mono (Whisper-optimized)
-                };
+                    Log($"❌ Failed to open capture device", false, ConsoleColor.Red);
+                    return false;
+                }
 
-                recordingStream = new MemoryStream();
-                waveWriter = new WaveFileWriter(recordingStream, waveIn.WaveFormat);
-
-                waveIn.DataAvailable += OnDataAvailable;
-                waveIn.RecordingStopped += OnRecordingStopped;
-
-                waveIn.StartRecording();
+                // Start capturing
+                recordedSamples = new List<short>();
                 isRecording = true;
+                shouldStopRecording = false;
                 recordingStartTime = DateTime.UtcNow;
+                ALC.CaptureStart(captureDevice);
 
-                Log("🎤 Started recording", false, ConsoleColor.Green);
+                // Start recording thread
+                recordingThread = new Thread(RecordingThreadLoop);
+                recordingThread.Start();
+
+                Log("🎤 Started recording (OpenAL)", false, ConsoleColor.Green);
                 return true;
             }
             catch (Exception ex)
@@ -173,6 +185,61 @@ namespace ChessChallenge.Application.Services
                 Log($"❌ Failed to start recording: {ex.Message}", false, ConsoleColor.Red);
                 CleanupRecording();
                 return false;
+            }
+        }
+
+        private void RecordingThreadLoop()
+        {
+            const int bufferSize = 4096; // samples to read at a time
+            short[] buffer = new short[bufferSize];
+
+            try
+            {
+                while (!shouldStopRecording && isRecording)
+                {
+                    // Check if max duration reached
+                    if (RecordingDuration >= MaxRecordingSeconds)
+                    {
+                        Log($"⏱️ Max recording duration ({MaxRecordingSeconds}s) reached, stopping", false, ConsoleColor.Yellow);
+                        break;
+                    }
+
+                    // Get number of samples available
+                    ALC.GetInteger(captureDevice, AlcGetInteger.CaptureSamples, 1, out int samplesAvailable);
+
+                    if (samplesAvailable > 0)
+                    {
+                        int samplesToRead = Math.Min(samplesAvailable, bufferSize);
+                        ALC.CaptureSamples(captureDevice, buffer, samplesToRead);
+
+                        // Add to recorded samples
+                        for (int i = 0; i < samplesToRead; i++)
+                        {
+                            recordedSamples.Add(buffer[i]);
+                        }
+
+                        // Calculate volume (peak amplitude)
+                        float peak = 0f;
+                        for (int i = 0; i < samplesToRead; i++)
+                        {
+                            float sampleValue = buffer[i] / 32768f;
+                            float absSample = Math.Abs(sampleValue);
+                            if (absSample > peak)
+                            {
+                                peak = absSample;
+                            }
+                        }
+
+                        // Smooth volume
+                        currentVolume = currentVolume * 0.7f + peak * 0.3f;
+                    }
+
+                    Thread.Sleep(10); // Check every 10ms
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Recording thread error: {ex.Message}", false, ConsoleColor.Red);
             }
         }
 
@@ -186,31 +253,42 @@ namespace ChessChallenge.Application.Services
 
             try
             {
-                waveIn?.StopRecording();
+                // Signal recording thread to stop
+                shouldStopRecording = true;
                 isRecording = false;
 
-                // Wait for recording to fully stop
-                System.Threading.Thread.Sleep(100);
+                // Wait for thread to finish
+                recordingThread?.Join(1000);
 
-                // Finalize WAV file
-                waveWriter?.Flush();
+                // Stop capture
+                if (captureDevice != null && captureDevice.Handle != IntPtr.Zero)
+                {
+                    ALC.CaptureStop(captureDevice);
 
-                // Get audio bytes
-                byte[] audioBytes = recordingStream?.ToArray() ?? Array.Empty<byte>();
+                    // Get any remaining samples
+                    ALC.GetInteger(captureDevice, AlcGetInteger.CaptureSamples, 1, out int samplesAvailable);
+                    if (samplesAvailable > 0)
+                    {
+                        short[] buffer = new short[samplesAvailable];
+                        ALC.CaptureSamples(captureDevice, buffer, samplesAvailable);
+                        recordedSamples.AddRange(buffer);
+                    }
+                }
 
-                if (audioBytes.Length == 0)
+                if (recordedSamples.Count == 0)
                 {
                     Log("⚠️ Recording is empty", false, ConsoleColor.Yellow);
                     CleanupRecording();
                     return null;
                 }
 
-                // Save to temp WAV file for Whisper processing
+                // Create WAV file
                 string tempWavPath = Path.Combine(Path.GetTempPath(), $"recording_{Guid.NewGuid()}.wav");
-                File.WriteAllBytes(tempWavPath, audioBytes);
+                WriteWavFile(tempWavPath, recordedSamples.ToArray(), SampleRate);
 
                 double duration = (DateTime.UtcNow - recordingStartTime).TotalSeconds;
-                Log($"🎤 Stopped recording ({duration:F1}s, {audioBytes.Length} bytes) -> {tempWavPath}", false, ConsoleColor.Green);
+                int bytesWritten = recordedSamples.Count * 2; // 16-bit samples
+                Log($"🎤 Stopped recording ({duration:F1}s, {bytesWritten} bytes) -> {tempWavPath}", false, ConsoleColor.Green);
 
                 CleanupRecording();
                 return tempWavPath;
@@ -223,46 +301,41 @@ namespace ChessChallenge.Application.Services
             }
         }
 
-        private void OnDataAvailable(object? sender, WaveInEventArgs e)
+        private void WriteWavFile(string filePath, short[] samples, int sampleRate)
         {
-            if (waveWriter != null && e.BytesRecorded > 0)
+            using (FileStream fs = new FileStream(filePath, FileMode.Create))
+            using (BinaryWriter writer = new BinaryWriter(fs))
             {
-                waveWriter.Write(e.Buffer, 0, e.BytesRecorded);
+                int numChannels = 1; // Mono
+                int bitsPerSample = 16;
+                int byteRate = sampleRate * numChannels * bitsPerSample / 8;
+                int blockAlign = numChannels * bitsPerSample / 8;
+                int dataSize = samples.Length * sizeof(short);
 
-                // Calculate volume level (peak amplitude) for visualization
-                float peak = 0f;
-                // Assuming 16-bit PCM audio (2 bytes per sample)
-                for (int i = 0; i < e.BytesRecorded; i += 2)
+                // RIFF header
+                writer.Write(new char[4] { 'R', 'I', 'F', 'F' });
+                writer.Write(36 + dataSize); // File size - 8
+                writer.Write(new char[4] { 'W', 'A', 'V', 'E' });
+
+                // fmt chunk
+                writer.Write(new char[4] { 'f', 'm', 't', ' ' });
+                writer.Write(16); // fmt chunk size
+                writer.Write((short)1); // Audio format (1 = PCM)
+                writer.Write((short)numChannels);
+                writer.Write(sampleRate);
+                writer.Write(byteRate);
+                writer.Write((short)blockAlign);
+                writer.Write((short)bitsPerSample);
+
+                // data chunk
+                writer.Write(new char[4] { 'd', 'a', 't', 'a' });
+                writer.Write(dataSize);
+
+                // Write samples
+                foreach (short sample in samples)
                 {
-                    if (i + 1 < e.BytesRecorded)
-                    {
-                        short sample = (short)((e.Buffer[i + 1] << 8) | e.Buffer[i]);
-                        float sampleValue = sample / 32768f; // Normalize to -1.0 to 1.0
-                        float absSample = Math.Abs(sampleValue);
-                        if (absSample > peak)
-                        {
-                            peak = absSample;
-                        }
-                    }
+                    writer.Write(sample);
                 }
-
-                // Smooth the volume with exponential moving average
-                currentVolume = currentVolume * 0.7f + peak * 0.3f;
-
-                // Auto-stop if max duration reached
-                if (RecordingDuration >= MaxRecordingSeconds)
-                {
-                    Log($"⏱️ Max recording duration ({MaxRecordingSeconds}s) reached, stopping", false, ConsoleColor.Yellow);
-                    waveIn?.StopRecording();
-                }
-            }
-        }
-
-        private void OnRecordingStopped(object? sender, StoppedEventArgs e)
-        {
-            if (e.Exception != null)
-            {
-                Log($"❌ Recording stopped with error: {e.Exception.Message}", false, ConsoleColor.Red);
             }
         }
 
@@ -270,28 +343,28 @@ namespace ChessChallenge.Application.Services
         {
             try
             {
-                if (waveWriter != null)
-                {
-                    waveWriter.Dispose();
-                    waveWriter = null;
-                }
-
-                if (recordingStream != null)
-                {
-                    recordingStream.Dispose();
-                    recordingStream = null;
-                }
-
-                if (waveIn != null)
-                {
-                    waveIn.DataAvailable -= OnDataAvailable;
-                    waveIn.RecordingStopped -= OnRecordingStopped;
-                    waveIn.Dispose();
-                    waveIn = null;
-                }
-
+                shouldStopRecording = true;
                 isRecording = false;
-                currentVolume = 0f; // Reset volume indicator
+
+                if (recordingThread != null && recordingThread.IsAlive)
+                {
+                    recordingThread.Join(1000);
+                    recordingThread = null;
+                }
+
+                if (captureDevice != null && captureDevice.Handle != IntPtr.Zero)
+                {
+                    try
+                    {
+                        ALC.CaptureStop(captureDevice);
+                        ALC.CaptureCloseDevice(captureDevice);
+                    }
+                    catch { }
+                    captureDevice = default;
+                }
+
+                recordedSamples?.Clear();
+                currentVolume = 0f;
             }
             catch (Exception ex)
             {
