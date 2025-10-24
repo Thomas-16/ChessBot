@@ -7,7 +7,7 @@ namespace ChessChallenge.Application
 {
     public static class UIHelper
     {
-        static readonly bool SDF_Enabled = true;
+        static readonly bool SDF_Enabled = false; // Disabled due to macOS issues with scissor mode
         const string fontName = "OPENSANS-SEMIBOLD.TTF";
         const int referenceResolution = 1920;
 
