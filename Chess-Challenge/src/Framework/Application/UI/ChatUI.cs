@@ -299,8 +299,8 @@ namespace ChessChallenge.Application
             float messageAreaX = scaledPos.X + scaledPadding;
             float messageAreaWidth = scaledSize.X - scaledPadding * 2;
 
-            // TEMPORARILY DISABLE scissor mode to test if it's the culprit
-            // Raylib.BeginScissorMode((int)messageAreaX, (int)messageAreaY, (int)messageAreaWidth, (int)messageAreaHeight);
+            // Enable scissor mode to clip messages to their area
+            Raylib.BeginScissorMode((int)messageAreaX, (int)messageAreaY, (int)messageAreaWidth, (int)messageAreaHeight);
 
             float currentY = messageAreaY + scrollOffset;
 
@@ -310,7 +310,7 @@ namespace ChessChallenge.Application
                 currentY += scaledPadding;
             }
 
-            // Raylib.EndScissorMode();
+            Raylib.EndScissorMode();
 
             // Draw scrollbar if content overflows
             DrawScrollbar(messageAreaX, messageAreaY, messageAreaWidth, messageAreaHeight);
@@ -455,8 +455,8 @@ namespace ChessChallenge.Application
                 inputTextOffset = 0f;
             }
 
-            // TEMPORARILY DISABLE scissor mode to test if it's the culprit
-            // Raylib.BeginScissorMode((int)(inputX + leftPadding), (int)inputY, (int)availableWidth, (int)scaledInputHeight);
+            // Enable scissor mode to clip input text
+            Raylib.BeginScissorMode((int)(inputX + leftPadding), (int)inputY, (int)availableWidth, (int)scaledInputHeight);
 
             Vector2 textPos = new Vector2(inputX + leftPadding + inputTextOffset, inputY + scaledInputHeight / 2);
             UIHelper.DrawText(displayText, textPos, fontSize, 1, textColor, UIHelper.AlignH.Left, UIHelper.AlignV.Centre);
@@ -473,7 +473,7 @@ namespace ChessChallenge.Application
                 );
             }
 
-            // Raylib.EndScissorMode();
+            Raylib.EndScissorMode();
 
             // Microphone button
             DrawMicButton(micButtonX, inputY, micButtonWidth, scaledInputHeight);
